@@ -44,7 +44,7 @@ class MyDataset(torch.utils.data.Dataset):
     # exit()
 
     # 因为 id 从零开始，直接取最后一个文件的 id + 1
-    self.categoryCount = int(os.listdir(dataset_dir)[-1].split('_')[0]) + 1
+    self.category_num = int(os.listdir(dataset_dir)[-1].split('_')[0]) + 1
     
   def __getitem__(self, index):
     data, label = self.data[index]
@@ -64,7 +64,7 @@ if __name__ == "__main__":
   # print(data)
   # print('[调试]', 'dataloader.py')
   ds = MyDataset()
-  print(ds.getCategoryCount())
+  print(ds.category_num)
   # dl = torch.utils.data.DataLoader(dataset=ds, batch_size=1, shuffle=True)
 
   # for x in dl:

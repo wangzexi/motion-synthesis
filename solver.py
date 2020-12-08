@@ -204,7 +204,7 @@ class Solver(object):
             # =================================================================================== #
             loss = {}
             # get identity z
-            id_z, _ = self.I(batch['img_profile'])
+            id_z, _ = self.I(batch['img_profile']) # ②而这里却拿一个one-hot向量当压缩的身份，难道所有的id特征都记到了I里，我认为这种实现不是很科学
             # get attribute z
             mu, logvar = self.A(batch['img_frontal'])
             a_z = self.reparameterization(mu, logvar)
@@ -219,7 +219,7 @@ class Solver(object):
             d_real, _ = self.D(batch['img_frontal'])
             d_fake, _ = self.D(x_fake.detach())
             # train I
-            loss_Li = self.classification_loss(id_z, batch['label'])
+            loss_Li = self.classification_loss(id_z, batch['label']) # ①这里用的交叉熵，我认为会把原始I的mu搞成one-hot向量
             # train A
             loss_KL = torch.sum(0.5 * (mu**2 + torch.exp(logvar) - logvar - 1))
             loss_GR = self.mse_loss(batch['img_frontal'], x_fake)
@@ -232,7 +232,7 @@ class Solver(object):
             self.reset_grad()
             d_loss.backward()
             self.d_optimizer.step()
-            self.c_optimizer.step()
+            self.c_optimizer.step() ##
             self.a_optimizer.step()
             self.i_optimizer.step()
 
