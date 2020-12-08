@@ -8,12 +8,13 @@ from dataloader import MyDataset
 
 torch.autograd.set_detect_anomaly(True)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 dataset = MyDataset()
-dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=30, shuffle=True, drop_last=True)
+dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=5, shuffle=True, drop_last=True)
 
-learning_rate = 1e-3
+learning_rate = 1e-4
 num_epochs = 10
 num_classes = dataset.category_num
 
@@ -121,6 +122,7 @@ d_optimizer = torch.optim.Adam(D.parameters(), learning_rate)
 
 cross_entropy_loss = torch.nn.CrossEntropyLoss()
 bce_loss = torch.nn.BCELoss()
+mse_loss = torch.nn.MSELoss()
 
 # 联合训练
 for epoch in range(num_epochs):
@@ -137,6 +139,8 @@ for epoch in range(num_epochs):
     lbd = 1 # 参数 λ
     ###
 
+    ################## 训练 I、C、A、D
+
     i_ctg, i_id = I(x_s) # ctg 代表 category
     c_ctg, _ = C(x_s)
 
@@ -152,35 +156,65 @@ for epoch in range(num_epochs):
 
     x_f = G(i_id, a_z) # f 代表 fake
 
-    d_fake_p, d_fake_feature = D(x_f)
     d_real_p, d_real_feature = D(x_s)
-    loss_D = torch.mean(-torch.log(d_real_p) - torch.log(1 - d_fake_p))
-    loss_GD = torch.mean(torch.diagonal(torch.cdist(d_fake_feature, d_real_feature)) * (1 / 2)) # 这里计算了n²个距离，然后抓出对角线，有性能优化空间
-    loss_GR = torch.mean(torch.diagonal(torch.cdist(x_f.reshape(batch, -1), x_a.view(batch, -1))) * (lbd / 2)) # 把 x_a 展平，计算 x_a 与 x_f 平方差距离
+    d_fake_p, d_fake_feature = D(x_f)
+    # loss_D = torch.mean(-torch.log(d_real_p) - torch.log(1 - d_fake_p))
+    loss_D = (bce_loss(d_real_p, torch.ones_like(d_real_p)) + bce_loss(d_fake_p, torch.zeros_like(d_fake_p))) / 2
+
     print('loss_D', loss_D)
+
+    i_optimizer.zero_grad()
+    c_optimizer.zero_grad()
+    d_optimizer.zero_grad()
+    a_optimizer.zero_grad()
+
+    loss_1 = loss_I + loss_C + loss_KL + loss_D
+    loss_1.backward(retain_graph=True)
+    i_optimizer.step()
+    c_optimizer.step()
+    d_optimizer.step()
+    a_optimizer.step()
+
+    ################## 训练 G
+
+    x_f = G(i_id, a_z) # f 代表 fake
+
+    d_real_p, d_real_feature = D(x_s)
+    d_fake_p, d_fake_feature = D(x_f)
+    # loss_GD = torch.mean(torch.diagonal(torch.cdist(d_fake_feature, d_real_feature)) * (1 / 2)) # 这里计算了n²个距离，然后抓出对角线，有性能优化空间
+    # loss_GR = torch.mean(torch.diagonal(torch.cdist(x_f.reshape(batch, -1), x_a.view(batch, -1))) * (lbd / 2)) # 把 x_a 展平，计算 x_a 与 x_f 平方差距离
+    loss_GD = (1/2) * mse_loss(d_fake_feature, d_real_feature)
+    loss_GR = (lbd/2) * mse_loss(x_f.reshape(batch, -1), x_a.view(batch, -1))
+
     print('loss_GD', loss_GD)
     print('loss_GR', loss_GR)
 
     _, c_fake_id = C(x_f)
-    loss_GC = torch.mean(torch.diagonal(torch.cdist(c_fake_id, i_id)) * (1 / 2)) # 这里计算了n²个距离，然后抓出对角线，有性能优化空间
+    # loss_GC = torch.mean(torch.diagonal(torch.cdist(c_fake_id, i_id)) * (1 / 2)) # 这里计算了n²个距离，然后抓出对角线，有性能优化空间
+    loss_GC = (1/2) * mse_loss(c_fake_id, i_id)
     print('loss_GC', loss_GC)
 
-    # 训练 D
-    # i_optimizer.zero_grad()
-    # c_optimizer.zero_grad()
-    # d_optimizer.zero_grad()
-    # g_optimizer.zero_grad()
-    # a_optimizer.zero_grad()
+    g_optimizer.zero_grad()
+    loss_2 = loss_GR + loss_GD + loss_GC
+    loss_2.backward()
+    g_optimizer.step()
 
+
+    ## 上面是原始代码的训练步骤
+    ## 下面是论文中的训练步骤
+    ## 都会遇到原地操作 Good Luck 报错
+
+    # i_optimizer.zero_grad()
     # loss_I.backward(retain_graph=True)
     # i_optimizer.step()
 
+    # c_optimizer.zero_grad()
     # loss_C.backward(retain_graph=True)
     # c_optimizer.step()
 
-    d_optimizer.zero_grad()
-    loss_D.backward(retain_graph=True)
-    d_optimizer.step()
+    # d_optimizer.zero_grad()
+    # loss_D.backward(retain_graph=True)
+    # d_optimizer.step()
 
     # g_optimizer.zero_grad()
     # loss_G = lbd * loss_GR + loss_GD + loss_GC
@@ -191,4 +225,3 @@ for epoch in range(num_epochs):
     # loss_A.backward()
     # a_optimizer.step()
 
-    # 训练 G
