@@ -203,6 +203,7 @@ for epoch in range(num_epochs):
     ## 上面是原始代码的训练步骤
     ## 下面是论文中的训练步骤
     ## 都会遇到原地操作 Good Luck 报错
+    ## 计算慢可以开启在第 11 行开启 gpu
 
     # i_optimizer.zero_grad()
     # loss_I.backward(retain_graph=True)
