@@ -65,7 +65,6 @@ num_classes = dataset.category_num
 #     print(p.max(dim=1)) #, targets)
 #     print(targets)
 
-# 复制来的，我还没仔细想
 def reparameterize(mu, logvar):
   std = torch.exp(0.5 * logvar)
   eps = torch.randn_like(std)
@@ -158,7 +157,7 @@ for epoch in range(num_epochs):
 
     d_real_p, d_real_feature = D(x_s)
     d_fake_p, d_fake_feature = D(x_f)
-    # loss_D = torch.mean(-torch.log(d_real_p) - torch.log(1 - d_fake_p))
+    # loss_D = torch.mean(-torch.log(d_real_p) - torch.log(1 - d_fake_p)) # 会出 log0 nan
     loss_D = (bce_loss(d_real_p, torch.ones_like(d_real_p)) + bce_loss(d_fake_p, torch.zeros_like(d_fake_p))) / 2
 
     print('loss_D', loss_D)
@@ -190,7 +189,7 @@ for epoch in range(num_epochs):
     print('loss_GR', loss_GR)
 
     _, c_fake_id = C(x_f)
-    # loss_GC = torch.mean(torch.diagonal(torch.cdist(c_fake_id, i_id)) * (1 / 2)) # 这里计算了n²个距离，然后抓出对角线，有性能优化空间
+    # loss_GC = torch.mean(torch.diagonal(torch.cdist(c_fake_id, i_id)) * (1 / 2))
     loss_GC = (1/2) * mse_loss(c_fake_id, i_id)
     print('loss_GC', loss_GC)
 
