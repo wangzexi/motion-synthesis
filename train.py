@@ -8,11 +8,11 @@ from dataloader import MyDataset
 
 torch.autograd.set_detect_anomaly(True)
 
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cpu')
 
 dataset = MyDataset()
-dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=5, shuffle=True, drop_last=True)
+dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=30, shuffle=True, drop_last=True)
 
 learning_rate = 1e-4
 num_epochs = 10
@@ -125,33 +125,40 @@ mse_loss = torch.nn.MSELoss()
 
 # 联合训练
 for epoch in range(num_epochs):
-  for batch_idx, (data, labels) in enumerate(dataloader):
+  for batch_idx, (data_a, labels_a, data_b, labels_b) in enumerate(dataloader):
 
-    batch = data.size(0)
+    batch = data_a.size(0)
 
-    x_s = data.to(device=device)
-    x_a = data.to(device=device)
-    labels = labels.to(device=device)
+    x_s = data_a.to(device=device)
+    x_a = data_b.to(device=device)
+    labels_a = labels_a.to(device=device)
+    # labels_b = labels_b.to(device=device) # 暂时用不到
 
-    print('!!!!!!!!!!--------------', batch_idx)
-    ## TODO 这里还有个交叉奇偶步骤训练的代码，按照论文
-    lbd = 1 # 参数 λ
-    ###
+    print('# 轮次：{}，批次：{}'.format(epoch, batch_idx))
+    ## 自交杂交轮流进行
+    if (batch_idx % 2 == 1):
+      # 奇数步自交
+      lbd = 1 # 参数 λ
+      x_a = x_s
+      print('## 自交，λ：{}'.format(lbd))
+    else:
+      # 偶数步杂交
+      lbd = 0.1
+      print('## 杂交，λ：{}'.format(lbd))
 
     ################## 训练 I、C、A、D
 
     i_ctg, i_id = I(x_s) # ctg 代表 category
     c_ctg, _ = C(x_s)
-
-    loss_I = cross_entropy_loss(i_ctg, labels)
-    loss_C = cross_entropy_loss(c_ctg, labels)
-    print('loss_I', loss_I)
-    print('loss_C', loss_C)
+    loss_I = cross_entropy_loss(i_ctg, labels_a)
+    loss_C = cross_entropy_loss(c_ctg, labels_a)
+    print('loss_I', loss_I.item())
+    print('loss_C', loss_C.item())
 
     a_mu, a_log_var = A(x_a) # VAE 的均值和标准差
-    a_z = reparameterize(a_mu, a_log_var) # 贴上一个正态分布
-    loss_KL = torch.mean(0.5 * (torch.pow(a_mu, 2) + torch.exp(a_log_var) - a_log_var - 1)) # 贴近正态分布，论文里抄来的，不知道为什么这么写
-    print('loss_KL', loss_KL)
+    a_z = reparameterize(a_mu, a_log_var) # 从均值和标准差组成的正态分布里采出一个 z
+    loss_KL = torch.mean(0.5 * (torch.pow(a_mu, 2) + torch.exp(a_log_var) - a_log_var - 1)) # 贴近正态分布的约束
+    print('loss_KL', loss_KL.item())
 
     x_f = G(i_id, a_z) # f 代表 fake
 
@@ -160,7 +167,7 @@ for epoch in range(num_epochs):
     # loss_D = torch.mean(-torch.log(d_real_p) - torch.log(1 - d_fake_p)) # 会出 log0 nan
     loss_D = (bce_loss(d_real_p, torch.ones_like(d_real_p)) + bce_loss(d_fake_p, torch.zeros_like(d_fake_p))) / 2
 
-    print('loss_D', loss_D)
+    print('loss_D', loss_D.item())
 
     i_optimizer.zero_grad()
     c_optimizer.zero_grad()
@@ -168,14 +175,16 @@ for epoch in range(num_epochs):
     a_optimizer.zero_grad()
 
     loss_1 = loss_I + loss_C + loss_KL + loss_D
-    loss_1.backward(retain_graph=True)
+    loss_1.backward()
     i_optimizer.step()
     c_optimizer.step()
     d_optimizer.step()
     a_optimizer.step()
 
     ################## 训练 G
-
+    _, i_id = I(x_s) # ctg 代表 category
+    a_mu, a_log_var = A(x_a) # VAE 的均值和标准差
+    a_z = reparameterize(a_mu, a_log_var) # 贴上一个正态分布
     x_f = G(i_id, a_z) # f 代表 fake
 
     d_real_p, d_real_feature = D(x_s)
@@ -185,13 +194,13 @@ for epoch in range(num_epochs):
     loss_GD = (1/2) * mse_loss(d_fake_feature, d_real_feature)
     loss_GR = (lbd/2) * mse_loss(x_f.reshape(batch, -1), x_a.view(batch, -1))
 
-    print('loss_GD', loss_GD)
-    print('loss_GR', loss_GR)
+    print('loss_GD', loss_GD.item())
+    print('loss_GR', loss_GR.item())
 
     _, c_fake_id = C(x_f)
     # loss_GC = torch.mean(torch.diagonal(torch.cdist(c_fake_id, i_id)) * (1 / 2))
     loss_GC = (1/2) * mse_loss(c_fake_id, i_id)
-    print('loss_GC', loss_GC)
+    print('loss_GC', loss_GC.item())
 
     g_optimizer.zero_grad()
     loss_2 = loss_GR + loss_GD + loss_GC
@@ -225,3 +234,12 @@ for epoch in range(num_epochs):
     # loss_A.backward()
     # a_optimizer.step()
 
+
+def save_models(path):
+  torch.save(I.state_dict(), os.path.join(path, 'I.pt'))
+  torch.save(C.state_dict(), os.path.join(path, 'C.pt'))
+  torch.save(A.state_dict(), os.path.join(path, 'A.pt'))
+  torch.save(D.state_dict(), os.path.join(path, 'D.pt'))
+  torch.save(G.state_dict(), os.path.join(path, 'G.pt'))
+
+save_models('./b30-e100')

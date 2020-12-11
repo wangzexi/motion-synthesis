@@ -21,7 +21,7 @@ def loadBVHData(filename):
     frame = list(map(lambda f : [float(x) for x in f.split(' ')], bvh.split('\n'))) # [240, 96]
 
     # 全部信息
-    data = skeleton + frame # [1, 96] + [240, 96] = [241, 96]
+    data = torch.FloatTensor(skeleton + frame) # [1, 96] + [240, 96] = [241, 96]
     label = int(os.path.basename(filename).split('_')[0]) # 文件名第一个数字作为标签
 
     return (data, label)
@@ -36,22 +36,35 @@ def getAllData(dirpath):
 
 
 class MyDataset(torch.utils.data.Dataset):
-  # rate 要使用的数据占全部的比率
+  # rate 要使用的数据占全部的比率，暂时无用
   def __init__(self, dataset_dir='./v5/walk_id_compacted', rate=1.0):
     self.data = getAllData(dataset_dir)
     # random.shuffle(self.data)
     # self.data = self.data[:int(len(self.data) * rate)]
     # exit()
 
-    # 因为 id 从零开始，直接取最后一个文件的 id + 1
+    self.combination = [] # 不同人物的运动数据杂交（笛卡尔积）
+    indexes = range(len(self.data))
+    for a in indexes:
+      for b in indexes:
+        _, label_a = self.data[a]
+        _, label_b = self.data[b]
+        if (label_a == label_b): # 不要自交
+          continue
+        self.combination.append((a, b))
+    print('数据及杂交后数量', len(self.combination))
+
+    # 因为 id 从零开始，分类总数直接取最后一个文件的 id + 1
     self.category_num = int(os.listdir(dataset_dir)[-1].split('_')[0]) + 1
     
   def __getitem__(self, index):
-    data, label = self.data[index]
-    return torch.FloatTensor(data), label
+    index_a, index_b = self.combination[index]
+    data_a, label_a = self.data[index_a]
+    data_b, label_b = self.data[index_b]
+    return data_a, label_a, data_b, label_b
 
   def __len__(self):
-    return len(self.data)
+    return len(self.combination)
 
 
 if __name__ == "__main__":
