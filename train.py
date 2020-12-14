@@ -22,7 +22,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #device = torch.device('cpu')
 
 dataset = MyDataset()
-dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=50, shuffle=True, drop_last=True)
+dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=30, shuffle=True, drop_last=True)
 
 learning_rate = 1e-4
 num_epochs = 50
@@ -217,7 +217,7 @@ for epoch in range(num_epochs):
     loss_2.backward()
     g_optimizer.step()
 
-    if epoch % 5 == 0 and (batch_idx % 5000 or batch_idx % 5001):
+    if epoch % 5 == 0 and (batch_idx % 5000 == 0 or batch_idx % 5000 == 1):
       data_utils.save_bvh_to_file(
         './outputs/轮次{}-批次{}-{}.bvh'.format(epoch, batch_idx, '自交' if batch_idx % 2 == 1 else '杂交'),
         x_f[0].cpu().detach()
