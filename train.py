@@ -5,6 +5,7 @@ from model import AttributeTCN
 from model import Generator
 from model import Discriminator
 from dataloader import MyDataset
+import data_utils
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -15,7 +16,7 @@ dataset = MyDataset()
 dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=30, shuffle=True, drop_last=True)
 
 learning_rate = 1e-4
-num_epochs = 10
+num_epochs = 100
 num_classes = dataset.category_num
 
 # 先预训练 identity 分类器
@@ -203,10 +204,15 @@ for epoch in range(num_epochs):
     print('loss_GC', loss_GC.item())
 
     g_optimizer.zero_grad()
-    loss_2 = loss_GR + loss_GD + loss_GC
+    loss_2 = lbd * loss_GR + loss_GD + loss_GC
     loss_2.backward()
     g_optimizer.step()
 
+    if epoch % 5 == 0 and batch_idx in [1, 2]:
+      data_utils.save_bvh_to_file(
+        './output/轮次{}-批次{}-{}.bvh'.format(epoch, batch_idx, '自交' if batch_idx % 2 == 1 else '杂交'),
+        x_f[0].cpu().detach()
+      )
 
     ## 上面是原始代码的训练步骤
     ## 下面是论文中的训练步骤
