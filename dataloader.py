@@ -28,7 +28,7 @@ class MyDataset(torch.utils.data.Dataset):
         if (label_a == label_b): # 不要自交
           continue
         self.combination.append((a, b))
-    print('数据及杂交后数量', len(self.combination))
+    print('数据集杂交后数量', len(self.combination))
 
     # 因为 id 从零开始，分类总数直接取最后一个文件的 id + 1
     files = list(filter(lambda f: f.split('.')[-1] == 'bvh', os.listdir(dataset_dir)))
