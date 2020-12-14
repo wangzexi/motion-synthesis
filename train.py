@@ -6,6 +6,15 @@ from model import Generator
 from model import Discriminator
 from dataloader import MyDataset
 import data_utils
+import pathlib
+
+def save_models(dirpath):
+  pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
+  torch.save(I.state_dict(), os.path.join(dirpath, 'I.pt'))
+  torch.save(C.state_dict(), os.path.join(dirpath, 'C.pt'))
+  torch.save(A.state_dict(), os.path.join(dirpath, 'A.pt'))
+  torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
+  torch.save(G.state_dict(), os.path.join(dirpath, 'G.pt'))
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -210,9 +219,11 @@ for epoch in range(num_epochs):
 
     if epoch % 5 == 0 and batch_idx in [1, 2]:
       data_utils.save_bvh_to_file(
-        './output/轮次{}-批次{}-{}.bvh'.format(epoch, batch_idx, '自交' if batch_idx % 2 == 1 else '杂交'),
+        './outputs/轮次{}-批次{}-{}.bvh'.format(epoch, batch_idx, '自交' if batch_idx % 2 == 1 else '杂交'),
         x_f[0].cpu().detach()
       )
+    if epoch % 10 == 0 and batch_idx == 0:
+      save_models('./models/轮次{}'.format(epoch))
 
     ## 上面是原始代码的训练步骤
     ## 下面是论文中的训练步骤
@@ -239,13 +250,3 @@ for epoch in range(num_epochs):
     # loss_A = lbd * (loss_KL + loss_G)
     # loss_A.backward()
     # a_optimizer.step()
-
-
-def save_models(path):
-  torch.save(I.state_dict(), os.path.join(path, 'I.pt'))
-  torch.save(C.state_dict(), os.path.join(path, 'C.pt'))
-  torch.save(A.state_dict(), os.path.join(path, 'A.pt'))
-  torch.save(D.state_dict(), os.path.join(path, 'D.pt'))
-  torch.save(G.state_dict(), os.path.join(path, 'G.pt'))
-
-save_models('./b30-e100')
