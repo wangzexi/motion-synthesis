@@ -268,9 +268,9 @@ class Generator(nn.Module):
         self.block7 = ResBlock(128, 128)
         self.block8 = ResBlock(128, 64)
         self.block9 = nn.Sequential(
-            nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1, bias=False)
-            # nn.LeakyReLU()
-            # nn.Tanh()
+            nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.LeakyReLU(),
+            nn.Tanh()
         )
 
     def forward(self, identity, attribute):
