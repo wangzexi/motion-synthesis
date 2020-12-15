@@ -12,11 +12,11 @@ class MyDataset(torch.utils.data.Dataset):
     
     # 计算 min max mean std
     data_without_lable = [x[0] for x in self.data]
-    statistics = data_utils.get_statistics(data_without_lable)
-    np.savetxt('./v5/walk_id_compacted/_min_max_mean_std.csv', statistics)
+    self.statistics = data_utils.get_statistics(data_without_lable)
+    np.savetxt('./v5/walk_id_compacted/_min_max_mean_std.csv', self.statistics)
     
     # 归一化
-    self.data = [(torch.FloatTensor(data_utils.normalized(x[0], statistics)), x[1]) for x in self.data]
+    self.data = [(torch.FloatTensor(data_utils.normalized(x[0], self.statistics)), x[1]) for x in self.data]
 
     # 不同人物的运动数据杂交（笛卡尔积）
     self.combination = []

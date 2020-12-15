@@ -8,14 +8,6 @@ from dataloader import MyDataset
 import data_utils
 import pathlib
 
-def save_models(dirpath):
-  pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
-  torch.save(I.state_dict(), os.path.join(dirpath, 'I.pt'))
-  torch.save(C.state_dict(), os.path.join(dirpath, 'C.pt'))
-  torch.save(A.state_dict(), os.path.join(dirpath, 'A.pt'))
-  torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
-  torch.save(G.state_dict(), os.path.join(dirpath, 'G.pt'))
-
 torch.autograd.set_detect_anomaly(True)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -75,6 +67,22 @@ num_classes = dataset.category_num
 #     print(p.max(dim=1)) #, targets)
 #     print(targets)
 
+
+def save_models(dirpath):
+  pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
+  torch.save(I.state_dict(), os.path.join(dirpath, 'I.pt'))
+  torch.save(C.state_dict(), os.path.join(dirpath, 'C.pt'))
+  torch.save(A.state_dict(), os.path.join(dirpath, 'A.pt'))
+  torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
+  torch.save(G.state_dict(), os.path.join(dirpath, 'G.pt'))
+
+def load_models(dirpath):
+  I.load_state_dict(torch.load(os.path.join(dirpath, 'I.pt')))
+  C.load_state_dict(torch.load(os.path.join(dirpath, 'C.pt')))
+  A.load_state_dict(torch.load(os.path.join(dirpath, 'A.pt')))
+  D.load_state_dict(torch.load(os.path.join(dirpath, 'D.pt')))
+  G.load_state_dict(torch.load(os.path.join(dirpath, 'G.pt')))
+
 def reparameterize(mu, logvar):
   std = torch.exp(0.5 * logvar)
   eps = torch.randn_like(std)
@@ -122,6 +130,8 @@ D = Discriminator(
   kernel_size=3,
   dropout=0.2
 ).to(device)
+
+# load_models('./models/轮次40')
 
 i_optimizer = torch.optim.Adam(I.parameters(), learning_rate)
 a_optimizer = torch.optim.Adam(A.parameters(), learning_rate)
@@ -218,9 +228,10 @@ for epoch in range(num_epochs):
     g_optimizer.step()
 
     if epoch % 5 == 0 and (batch_idx % 5000 == 0 or batch_idx % 5000 == 1):
+      # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
       data_utils.save_bvh_to_file(
         './outputs/轮次{}-批次{}-{}.bvh'.format(epoch, batch_idx, '自交' if batch_idx % 2 == 1 else '杂交'),
-        x_f[0].cpu().detach()
+        data_utils.denormalized(x_f[0].cpu().detach(), dataset.statistics)
       )
     if epoch % 10 == 0 and batch_idx == 0:
       save_models('./models/轮次{}'.format(epoch))
