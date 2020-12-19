@@ -240,9 +240,9 @@ class AttributeTCN(nn.Module):
 
 #         return mu, logvar
 
-# 生成一个 [241*96] 的张量
+# 生成 [239, 96]
 class Generator(nn.Module):
-    def __init__(self, id_dim=256, a_dim=256, out_size=(241, 96)):
+    def __init__(self, id_dim=256, a_dim=256, out_size=(239, 96)):
         super(Generator, self).__init__()
 
         self.out_size = out_size
@@ -287,8 +287,8 @@ class Generator(nn.Module):
         x = self.block7(x) # [n, 128, 128, 128]
         x = self.block8(x) # [n, 64, 256, 256]
         x = self.block9(x) # [n, 1, 256, 256]
-        x = x[:, :, :self.out_size[0], :self.out_size[1]] # 实际只使用 [n, 1, 241, 96]
-        x = x.view(x.size(0), x.size(2), x.size(3)) # [n, 241, 96]
+        x = x[:, :, :self.out_size[0], :self.out_size[1]] # 实际只使用 [n, 1, 239, 96]
+        x = x.view(x.size(0), x.size(2), x.size(3)) # [n, 239, 96]
         return x
 
 class Discriminator(nn.Module):
