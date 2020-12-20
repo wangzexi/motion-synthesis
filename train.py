@@ -222,7 +222,7 @@ for epoch in range(num_epochs):
     print('loss_GC', loss_GC.item())
 
     g_optimizer.zero_grad()
-    loss_2 = lbd * loss_GR + loss_GD + loss_GC
+    loss_2 = loss_GR + loss_GD + loss_GC
     loss_2.backward()
     g_optimizer.step()
 
