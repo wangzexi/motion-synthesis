@@ -185,7 +185,7 @@ for epoch in range(num_epochs):
 
     x_f = G(i_id, a_z) # f 代表 fake
 
-    d_real_p, d_real_feature = D(x_s)
+    d_real_p, d_real_feature = D(x_a)
     d_fake_p, d_fake_feature = D(x_f)
     # loss_D = torch.mean(-torch.log(d_real_p) - torch.log(1 - d_fake_p)) # 会出 log0 nan
     loss_D = 0.5 * (bce_loss(d_real_p, torch.ones_like(d_real_p)) + bce_loss(d_fake_p, torch.zeros_like(d_fake_p)))
@@ -208,7 +208,7 @@ for epoch in range(num_epochs):
     a_z = reparameterize(a_mu, a_log_var) # 贴上一个正态分布
     x_f = G(i_id, a_z) # f 代表 fake
 
-    d_real_p, d_real_feature = D(x_s)
+    d_real_p, d_real_feature = D(x_a)
     d_fake_p, d_fake_feature = D(x_f)
     loss_GD = 0.5 * mse_loss(d_fake_feature, d_real_feature)
     # loss_GR = lbd * 0.5 * mse_loss(x_f.reshape(batch_size, -1), x_a.view(batch_size, -1))
