@@ -17,7 +17,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 dataset = MyDataset()
 
-batch_size = 30
+batch_size = 20
 learning_rate = 1e-4
 num_epochs = 50
 num_classes = dataset.category_num
@@ -144,8 +144,8 @@ cross_entropy_loss = torch.nn.CrossEntropyLoss()
 bce_loss = torch.nn.BCELoss()
 mse_loss = torch.nn.MSELoss()
 
-losses = np.array([]).reshape(0, 5) # 用于绘制折线图
 legends = ['loss_I', 'loss_KL', 'loss_D', 'loss_GD', 'loss_GR', 'loss_GC']
+losses = np.array([]).reshape(0, len(legends)) # 用于绘制折线图
 
 # 训练
 for epoch in range(num_epochs):
@@ -227,7 +227,7 @@ for epoch in range(num_epochs):
     g_optimizer.step()
 
     # 画损失图
-    losses = np.concatenate((losses, np.array([loss_I.item(), loss_KL.item(), loss_D.item(), loss_GD.item(), loss_GC.item()]).reshape(1, 5)), axis=0)
+    losses = np.concatenate((losses, np.array([loss_I.item(), loss_KL.item(), loss_D.item(), loss_GD.item(), loss_GR.item(), loss_GC.item()]).reshape(1, -1)), axis=0)
     losses = losses[:10000, :] # 只查看最近的损失
     x_axis = np.arange(losses.shape[0])
 
