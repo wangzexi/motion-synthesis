@@ -228,7 +228,7 @@ for epoch in range(num_epochs):
 
     # 画损失图
     losses = np.concatenate((losses, np.array([loss_I.item(), loss_KL.item(), loss_D.item(), loss_GD.item(), loss_GR.item(), loss_GC.item()]).reshape(1, -1)), axis=0)
-    losses = losses[:10000, :] # 只查看最近的损失
+    losses = losses[-10000:, :] # 只查看最近的损失
     x_axis = np.arange(losses.shape[0])
 
     fig, axs = plt.subplots(losses.shape[1])
