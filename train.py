@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 from model import EncoderTCN
 from model import AttributeTCN
 from model import Generator
@@ -143,6 +144,9 @@ cross_entropy_loss = torch.nn.CrossEntropyLoss()
 bce_loss = torch.nn.BCELoss()
 mse_loss = torch.nn.MSELoss()
 
+losses = np.array([]).reshape(0, 5) # 用于绘制折线图
+legends = ['loss_I', 'loss_KL', 'loss_D', 'loss_GD', 'loss_GR', 'loss_GC']
+
 # 训练
 for epoch in range(num_epochs):
   for batch_idx, (data_a, data_b) in enumerate(dataloader):
@@ -207,7 +211,8 @@ for epoch in range(num_epochs):
     d_real_p, d_real_feature = D(x_s)
     d_fake_p, d_fake_feature = D(x_f)
     loss_GD = 0.5 * mse_loss(d_fake_feature, d_real_feature)
-    loss_GR = lbd * 0.5 * mse_loss(x_f.reshape(batch_size, -1), x_a.view(batch_size, -1))
+    # loss_GR = lbd * 0.5 * mse_loss(x_f.reshape(batch_size, -1), x_a.view(batch_size, -1))
+    loss_GR = lbd * 0.5 * mse_loss(x_f, x_a)
 
     print('loss_GD', loss_GD.item())
     print('loss_GR', loss_GR.item())
@@ -221,7 +226,20 @@ for epoch in range(num_epochs):
     loss_2.backward()
     g_optimizer.step()
 
-    if epoch % 5 == 0 and (batch_idx % 5000 == 0 or batch_idx % 5000 == 1):
+    # 画损失图
+    losses = np.concatenate((losses, np.array([loss_I.item(), loss_KL.item(), loss_D.item(), loss_GD.item(), loss_GC.item()]).reshape(1, 5)), axis=0)
+    losses = losses[:10000, :] # 只查看最近的损失
+    x_axis = np.arange(losses.shape[0])
+
+    fig, axs = plt.subplots(losses.shape[1])
+    for i in range(len(axs)):
+      axs[i].set_title(legends[i])
+      axs[i].plot(x_axis, losses[:, i])
+    fig.savefig('losses.png')
+    plt.close(fig)
+
+    # 输出检查点
+    if epoch % 2 == 0 and (batch_idx % 5000 == 0 or batch_idx % 5000 == 1):
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
 
       skeleton = skeleton_a.view(batch_size, 1, -1).numpy() # [N, 1, 96]
@@ -231,11 +249,15 @@ for epoch in range(num_epochs):
       frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames])
       data = np.concatenate((skeleton, frames), axis=1) # [N, 241, 96]
 
+      # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
+
       data_utils.save_bvh_to_file(
         './outputs/轮次{}-批次{}-{}.bvh'.format(epoch, batch_idx, '自交' if batch_idx % 2 == 1 else '杂交'),
         data[0]
       )
-    if epoch % 10 == 0 and batch_idx == 0:
+
+    # 保存模型
+    if epoch % 2 == 0 and batch_idx == 0:
       save_models('./models/轮次{}'.format(epoch))
 
     ## 上面是原始代码的训练步骤
