@@ -82,15 +82,11 @@ def transform_detal_frames_to_frames(detal_frames):
   # ]
   return frames # [240, 96]
 
-def get_data_frames_statistics(data):
-  # data: [
-  #   (skeleton: [96], frames: [240, 96], label: int),
-  #   ...
-  # ]
+def get_data_frames_statistics(frames):
+  # frames: [161, 239, 96]
 
-  all_frames = np.array([x[1] for x in data]) # [161, 240, 96]
-  j_data = all_frames.swapaxes(1,2) # [161, 96, 240]
-  j_data = np.concatenate(j_data, axis=1) # 所有 bvh 文件按关节拼起来, [96, 161 * 240]
+  j_data = frames.swapaxes(1, 2) # [161, 96, 239]
+  j_data = np.concatenate(j_data, axis=1) # 所有 bvh 文件按关节拼起来, [96, 161 * 239]
   j_statistics = np.stack([j_data.min(axis=1), j_data.max(axis=1), j_data.mean(axis=1), j_data.std(axis=1)], axis=1)
 
   # j_statistics: [

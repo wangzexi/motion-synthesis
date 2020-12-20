@@ -13,7 +13,9 @@ class MyDataset(torch.utils.data.Dataset):
     self.data = [(skeleton, data_utils.transform_frames_to_detal_frames(frames), label) for skeleton, frames, label in self.data]
 
     # 计算统计数据 min, max, mean, std
-    self.statistics = data_utils.get_data_frames_statistics(self.data)
+    all_frames = np.array([x[1] for x in self.data]) # [161, 240, 96]
+    all_frames = all_frames[:, 1:, :] # [161, 239, 96] 统计时去除第一帧，因为它不是增量
+    self.statistics = data_utils.get_data_frames_statistics(all_frames)
     np.savetxt('./v5/walk_id_compacted/_min_max_mean_std.csv', self.statistics)
     
     # 将帧数据归一化

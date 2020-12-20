@@ -19,7 +19,7 @@ dataset = MyDataset()
 
 batch_size = 20
 learning_rate = 1e-4
-num_epochs = 50
+num_epochs = 100
 num_classes = dataset.category_num
 
 dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=True)
@@ -242,9 +242,18 @@ for epoch in range(num_epochs):
     if epoch % 2 == 0 and (batch_idx % 5000 == 0 or batch_idx % 5000 == 1):
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
 
-      skeleton = skeleton_a.view(batch_size, 1, -1).numpy() # [N, 1, 96]
+      if batch_idx % 2 == 1:
+        tag = '自交'
+        label = label_s
+        skeleton = skeleton_s.view(batch_size, 1, -1).numpy() # [N, 1, 96]
+        base_frames = frames_s[:, 0:1, :]
+      else:
+        tag = '杂交'
+        label = label_a
+        skeleton = skeleton_a.view(batch_size, 1, -1).numpy() # [N, 1, 96]
+        base_frames = frames_a[:, 0:1, :]
 
-      frames = torch.cat((x_a[:, 0:1, :], x_f), dim=1).detach().cpu().numpy() # 拼上原始第一帧
+      frames = torch.cat((base_frames, x_f.detach().cpu()), dim=1).numpy() # 拼上原始第一帧
       frames = np.array([data_utils.normalized_frames_to_frames(x, dataset.statistics) for x in frames])
       frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames])
       data = np.concatenate((skeleton, frames), axis=1) # [N, 241, 96]
@@ -252,7 +261,7 @@ for epoch in range(num_epochs):
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
 
       data_utils.save_bvh_to_file(
-        './outputs/轮次{}-批次{}-{}.bvh'.format(epoch, batch_idx, '自交' if batch_idx % 2 == 1 else '杂交'),
+        './outputs/轮次{}-批次{}-{}-ID{}.bvh'.format(epoch, batch_idx, tag, label[0]),
         data[0]
       )
 
