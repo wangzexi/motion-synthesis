@@ -6,7 +6,7 @@ from model import EncoderTCN
 from model import AttributeTCN
 from model import Generator
 from model import Discriminator
-from dataloader import MyDataset
+import dataloader
 import data_utils
 import pathlib
 
@@ -15,7 +15,7 @@ torch.autograd.set_detect_anomaly(True)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #device = torch.device('cpu')
 
-dataset = MyDataset()
+dataset = dataloader.Hybrid_Dataset(*dataloader.load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'))
 
 batch_size = 20
 learning_rate = 1e-4
@@ -24,71 +24,16 @@ num_classes = dataset.category_num
 
 dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
-# 先预训练 identity 分类器
-# I = EncoderTCN(
-#   input_size=241, # 骨骼1帧 + 动作240帧
-#   latent_dim=64,
-#   category_num=num_classes,
-#   level_channel_num=256,
-#   level_num=7,
-#   kernel_size=3,
-#   dropout=0.2
-# ).to(device)
-
-# i_path = './models/I.pt'
-# if os.path.isfile(i_path): # 如果有预训练的 I，就直接载入，跳过训练
-#   I.load_state_dict(torch.load(i_path))
-# else:
-#   li_loss = torch.nn.CrossEntropyLoss()
-#   i_optimizer = torch.optim.Adam(I.parameters(), learning_rate)
-
-#   # 训练 I
-#   for epoch in range(num_epochs):
-#     for batch_idx, (data, targets) in enumerate(dataloader):
-#       data = data.to(device=device)
-#       targets = targets.to(device=device)
-      
-#       class_pred, identity = I(data)
-#       i_loss = li_loss(class_pred, targets)
-
-#       i_optimizer.zero_grad()
-#       i_loss.backward()
-#       i_optimizer.step()
-
-#       print('epoch {} batch_idx {} LOSS {}'.format(epoch, batch_idx, i_loss))
-  
-#   torch.save(I.state_dict(), i_path)
-
-# if 1 == 0: # 手动测试开关
-#   # 分类器测试，这是个错误的测试方法，它用作测试的是训练集
-#   for data, targets in dataloader:
-#     data = data.to(device=device)
-#     targets = targets.to(device=device)
-#     class_pred, identity = I(data)
-    
-#     p = torch.nn.functional.softmax(class_pred)
-#     print('----')
-#     print(p.max(dim=1)) #, targets)
-#     print(targets)
-
-
 def save_models(dirpath):
   pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
-  torch.save(I.state_dict(), os.path.join(dirpath, 'I.pt'))
   torch.save(A.state_dict(), os.path.join(dirpath, 'A.pt'))
   torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
   torch.save(G.state_dict(), os.path.join(dirpath, 'G.pt'))
 
 def load_models(dirpath):
-  I.load_state_dict(torch.load(os.path.join(dirpath, 'I.pt')))
   A.load_state_dict(torch.load(os.path.join(dirpath, 'A.pt')))
   D.load_state_dict(torch.load(os.path.join(dirpath, 'D.pt')))
   G.load_state_dict(torch.load(os.path.join(dirpath, 'G.pt')))
-
-def reparameterize(mu, logvar):
-  std = torch.exp(0.5 * logvar)
-  eps = torch.randn_like(std)
-  return eps * std + mu
 
 I = EncoderTCN(
   input_size=239, # frames 239
@@ -97,8 +42,16 @@ I = EncoderTCN(
   level_channel_num=256,
   level_num=7,
   kernel_size=3,
-  dropout=0.2
+  dropout=0.3
 ).to(device)
+
+I_path = './models/I.pt'
+if os.path.isfile(I_path): # 如果有预训练的 I，就直接载入
+  I.load_state_dict(torch.load(I_path))
+  print('已经载入预训练的 I.pt 文件')
+else:
+  print('不存在预训练的 I.pt 文件')
+  exit()
 
 A = AttributeTCN(
   input_size=239, # frames 239
@@ -135,6 +88,11 @@ D = Discriminator(
 
 # load_models('./models/轮次40')
 
+def reparameterize(mu, logvar):
+  std = torch.exp(0.5 * logvar)
+  eps = torch.randn_like(std)
+  return eps * std + mu
+
 i_optimizer = torch.optim.Adam(I.parameters(), learning_rate)
 a_optimizer = torch.optim.Adam(A.parameters(), learning_rate)
 g_optimizer = torch.optim.Adam(G.parameters(), learning_rate)
@@ -144,7 +102,7 @@ cross_entropy_loss = torch.nn.CrossEntropyLoss()
 bce_loss = torch.nn.BCELoss()
 mse_loss = torch.nn.MSELoss()
 
-legends = ['loss_I', 'loss_KL', 'loss_D', 'loss_GD', 'loss_GR', 'loss_GC']
+legends = ['loss_I freeze', 'loss_KL', 'loss_D', 'loss_GD', 'loss_GR', 'loss_GC']
 losses = np.array([]).reshape(0, len(legends)) # 用于绘制折线图
 
 # 训练
@@ -174,8 +132,8 @@ for epoch in range(num_epochs):
 
     ################## 训练 I、A、D
 
-    i_category, i_id = I(x_s)
-    loss_I = cross_entropy_loss(i_category, label_s)
+    i_ctg, i_id = I(x_s)
+    loss_I = cross_entropy_loss(i_ctg, label_s)
     print('loss_I', loss_I.item())
 
     a_mu, a_log_var = A(x_a) # VAE 的均值和标准差
@@ -192,13 +150,13 @@ for epoch in range(num_epochs):
 
     print('loss_D', loss_D.item())
 
-    i_optimizer.zero_grad()
+    # i_optimizer.zero_grad() # 不再更新 I
     d_optimizer.zero_grad()
     a_optimizer.zero_grad()
 
     loss_1 = loss_I + loss_KL + loss_D
     loss_1.backward()
-    i_optimizer.step()
+    # i_optimizer.step()
     d_optimizer.step()
     a_optimizer.step()
 
@@ -217,12 +175,14 @@ for epoch in range(num_epochs):
     print('loss_GD', loss_GD.item())
     print('loss_GR', loss_GR.item())
 
-    _, c_fake_id = I(x_f) # 这里原本是用 C 再识别，现在改为 I
+    c_ctg, c_fake_id = I(x_f) # 这里原本是用 C 再识别，现在改为 I
+    loss_C = cross_entropy_loss(c_ctg, label_s)
+    print('loss_C', loss_C.item())
     loss_GC = 0.5 * mse_loss(c_fake_id, i_id)
     print('loss_GC', loss_GC.item())
 
     g_optimizer.zero_grad()
-    loss_2 = loss_GR + loss_GD + loss_GC
+    loss_2 = loss_GR + loss_GD + loss_GC + loss_C
     loss_2.backward()
     g_optimizer.step()
 
@@ -239,7 +199,7 @@ for epoch in range(num_epochs):
     plt.close(fig)
 
     # 输出检查点
-    if epoch % 2 == 0 and (batch_idx % 5000 == 0 or batch_idx % 5000 == 1):
+    if epoch % 1 == 0 and (batch_idx % 1000 == 0 or batch_idx % 1000 == 1):
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
 
       if batch_idx % 2 == 1:
@@ -266,7 +226,7 @@ for epoch in range(num_epochs):
       )
 
     # 保存模型
-    if epoch % 2 == 0 and batch_idx == 0:
+    if epoch % 1 == 0 and batch_idx == 0:
       save_models('./models/轮次{}'.format(epoch))
 
     ## 上面是原始代码的训练步骤

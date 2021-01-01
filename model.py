@@ -86,8 +86,9 @@ class EncoderTCN(nn.Module):
         )
         
         # TCN最后一层接线性层
-        self.fc_ctg = nn.Linear(channels[-1], category_num) # 分类 one-hot 向量
         self.fc_id = nn.Linear(channels[-1], latent_dim) # 压缩出的 identity 向量
+        self.leaky_relu = nn.LeakyReLU(0.1)
+        self.fc_ctg = nn.Linear(latent_dim, category_num) # 分类 one-hot 向量
 
     def forward(self, data):
         # inputs: [样本个数, 单样本输入的通道数, 样本序列长度]
@@ -100,8 +101,8 @@ class EncoderTCN(nn.Module):
         x = x[:, :, -1] # 对每个输出通道，取出最后一个神经元的值，这些玩意卷积了它们前面的序列元素
 
         # [样本个数, output_size]
-        ctg = self.fc_ctg(x)
         identity = self.fc_id(x)
+        ctg = self.leaky_relu(self.fc_ctg(identity))
         return ctg, identity # 分类向量，压缩出的 identity
 
 ## 上面的 TCN 取代了这个
@@ -311,7 +312,7 @@ class Discriminator(nn.Module):
         mid = F.leaky_relu(self.fc1(x), negative_slope=0.2) # [n, 64]
         p = self.fc2(mid) # [n, 1]
         p = torch.sigmoid(p) # [n, 1]
-        p = p.view(p.size(0)) # [n]
+        p = p.view(-1) # [n]
 
         # x = F.leaky_relu(self.conv1(x), negative_slope=0.2)
         # x = F.leaky_relu(self.BN2(self.conv2(x)), negative_slope=0.2)
