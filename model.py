@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from torch.autograd import Variable
-# from net_sphere import sphere20a # 这个东西好像没用到
 from tcn import TemporalConvNet
 
 
@@ -65,10 +64,10 @@ class ResidualBlock(nn.Module):
 
 # I 与 C 都是这个玩意
 class EncoderTCN(nn.Module):
-    def __init__(self, input_size, latent_dim=24, category_num=10, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
+    def __init__(self, in_channel_num, identity_dim=24, category_num=10, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
         '''
-        input_size: 单样本通道数，[样本个数, 单样本输入的通道数, 样本序列长度]
-        latent_dim：输出的潜在向量 identity 的长度
+        in_channel_num: 单样本通道数，[样本个数, 单样本输入的通道数, 样本序列长度]
+        identity_dim：输出的潜在向量 identity 的长度
         category_num：分类 one-hot 向量长度
         level_channel_num: 每层卷积核的数量，最终输出的通道数
         level_num: 膨胀卷积层数，层数高则感知野大，某层感知野的范围是2的幂
@@ -79,16 +78,16 @@ class EncoderTCN(nn.Module):
 
         channels = [level_channel_num] * level_num # [第1层卷积核数量，第2层卷积核数量, ..., 第levels层卷积核数量]
         self.tcn = TemporalConvNet(
-            input_size,
+            in_channel_num,
             channels,
             kernel_size=kernel_size,
             dropout=dropout
         )
         
         # TCN最后一层接线性层
-        self.fc_id = nn.Linear(channels[-1], latent_dim) # 压缩出的 identity 向量
+        self.fc_id = nn.Linear(channels[-1], identity_dim) # 压缩出的 identity 向量
         self.leaky_relu = nn.LeakyReLU(0.1)
-        self.fc_ctg = nn.Linear(latent_dim, category_num) # 分类 one-hot 向量
+        self.fc_ctg = nn.Linear(identity_dim, category_num) # 分类 one-hot 向量
 
     def forward(self, data):
         # inputs: [样本个数, 单样本输入的通道数, 样本序列长度]
@@ -132,123 +131,35 @@ class EncoderTCN(nn.Module):
 
 # 特征提取也用 TCN 吧
 class AttributeTCN(nn.Module):
-    def __init__(self, input_size, latent_dim=24, category_num=10, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
+    def __init__(self, in_channel_num, out_dim=24, category_num=10, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
         super(AttributeTCN, self).__init__()
 
         channels = [level_channel_num] * level_num
         self.tcn = TemporalConvNet(
-            input_size,
+            in_channel_num,
             channels,
             kernel_size=kernel_size,
             dropout=dropout
         )
-        self.fc_mu = nn.Linear(channels[-1], latent_dim) # VAE 的 mu
-        self.fc_var = nn.Linear(channels[-1], latent_dim) # VAE 的 var
+        self.fc_mu = nn.Linear(channels[-1], out_dim) # VAE 的 mu
+        self.fc_var = nn.Linear(channels[-1], out_dim) # VAE 的 var
 
     def forward(self, data):
-        x = self.tcn(data)
-        x = x[:, :, -1]
-
+        x = self.tcn(data) # [N, C, T]
+        x = x[:, :, -1] # [N, C]
         mu = self.fc_mu(x)
         log_var = self.fc_var(x)
         return mu, log_var
 
-# # 换为上面的 TCN 了
-# class Attribute(nn.Module):
-#     def __init__(self, latent_dim=8, feature=False):
-#         super(Attribute, self).__init__()
-#         """
-#             Output is mu and log(var) for re-parameterization trick used in Variation Auto Encoder.
-#             Encoding is done in this order.
-#             1. Use this encoder and get mu and log_var
-#             2. std = exp(log(var / 2))
-#             3. random_z = N(0, 1)
-#             4. encoded_z = random_z * std + mu (Re-parameterization trick)
-#         """
-#         self.feature = feature
-#         #input = B*3*112*96
-#         self.conv1_1 = nn.Conv2d(3,64,3,2,1) #=>B*64*56*48
-#         self.relu1_1 = nn.PReLU(64)
-#         self.conv1_2 = nn.Conv2d(64,64,3,1,1)
-#         self.relu1_2 = nn.PReLU(64)
-#         self.conv1_3 = nn.Conv2d(64,64,3,1,1)
-#         self.relu1_3 = nn.PReLU(64)
-
-#         self.conv2_1 = nn.Conv2d(64,128,3,2,1) #=>B*128*28*24
-#         self.relu2_1 = nn.PReLU(128)
-#         self.conv2_2 = nn.Conv2d(128,128,3,1,1)
-#         self.relu2_2 = nn.PReLU(128)
-#         self.conv2_3 = nn.Conv2d(128,128,3,1,1)
-#         self.relu2_3 = nn.PReLU(128)
-
-#         self.conv2_4 = nn.Conv2d(128,128,3,1,1) #=>B*128*28*24
-#         self.relu2_4 = nn.PReLU(128)
-#         self.conv2_5 = nn.Conv2d(128,128,3,1,1)
-#         self.relu2_5 = nn.PReLU(128)
-
-#         self.conv3_1 = nn.Conv2d(128,256,3,2,1) #=>B*256*14*12
-#         self.relu3_1 = nn.PReLU(256)
-#         self.conv3_2 = nn.Conv2d(256,256,3,1,1)
-#         self.relu3_2 = nn.PReLU(256)
-#         self.conv3_3 = nn.Conv2d(256,256,3,1,1)
-#         self.relu3_3 = nn.PReLU(256)
-
-#         self.conv3_4 = nn.Conv2d(256,256,3,1,1) #=>B*256*14*12
-#         self.relu3_4 = nn.PReLU(256)
-#         self.conv3_5 = nn.Conv2d(256,256,3,1,1)
-#         self.relu3_5 = nn.PReLU(256)
-
-#         self.conv3_6 = nn.Conv2d(256,256,3,1,1) #=>B*256*14*12
-#         self.relu3_6 = nn.PReLU(256)
-#         self.conv3_7 = nn.Conv2d(256,256,3,1,1)
-#         self.relu3_7 = nn.PReLU(256)
-
-#         self.conv3_8 = nn.Conv2d(256,256,3,1,1) #=>B*256*14*12
-#         self.relu3_8 = nn.PReLU(256)
-#         self.conv3_9 = nn.Conv2d(256,256,3,1,1)
-#         self.relu3_9 = nn.PReLU(256)
-
-#         self.conv4_1 = nn.Conv2d(256,512,3,2,1) #=>B*512*7*6
-#         self.relu4_1 = nn.PReLU(512)
-#         self.conv4_2 = nn.Conv2d(512,512,3,1,1)
-#         self.relu4_2 = nn.PReLU(512)
-#         self.conv4_3 = nn.Conv2d(512,512,3,1,1)
-#         self.relu4_3 = nn.PReLU(512)
-#         self.pooling = nn.AvgPool2d(kernel_size=8, stride=8, padding=0)
-#         self.fc_mu = nn.Linear(512, latent_dim)
-#         self.fc_logvar = nn.Linear(512, latent_dim)
-
-#     def forward(self, x):
-#         x = self.relu1_1(self.conv1_1(x))
-#         x = x + self.relu1_3(self.conv1_3(self.relu1_2(self.conv1_2(x))))
-
-#         x = self.relu2_1(self.conv2_1(x))
-#         x = x + self.relu2_3(self.conv2_3(self.relu2_2(self.conv2_2(x))))
-#         x = x + self.relu2_5(self.conv2_5(self.relu2_4(self.conv2_4(x))))
-
-#         x = self.relu3_1(self.conv3_1(x))
-#         x = x + self.relu3_3(self.conv3_3(self.relu3_2(self.conv3_2(x))))
-#         x = x + self.relu3_5(self.conv3_5(self.relu3_4(self.conv3_4(x))))
-#         x = x + self.relu3_7(self.conv3_7(self.relu3_6(self.conv3_6(x))))
-#         x = x + self.relu3_9(self.conv3_9(self.relu3_8(self.conv3_8(x))))
-
-#         x = self.relu4_1(self.conv4_1(x))
-#         x = x + self.relu4_3(self.conv4_3(self.relu4_2(self.conv4_2(x))))
-#         x = self.pooling(x)
-#         x = x.view(x.size(0), -1)
-#         mu = self.fc_mu(x)
-#         logvar = self.fc_logvar(x)
-
-#         return mu, logvar
-
+'''
 # 生成 [239, 96]
 class Generator(nn.Module):
-    def __init__(self, id_dim=256, a_dim=256, out_size=(239, 96)):
+    def __init__(self, identity_dim=256, attribute_dim=256, out_size=(96, 239)):
         super(Generator, self).__init__()
 
         self.out_size = out_size
 
-        self.fc = nn.Linear(id_dim + a_dim, 512)
+        self.fc = nn.Linear(identity_dim + attribute_dim, 512)
         self.up = nn.Upsample(scale_factor=8)
 
         self.block1 = nn.Sequential(
@@ -290,29 +201,58 @@ class Generator(nn.Module):
         x = x[:, :, :self.out_size[0], :self.out_size[1]] # 实际只使用 [n, 1, 239, 96]
         x = x.view(x.size(0), x.size(2), x.size(3)) # [n, 239, 96]
         return x
+'''
+
+# 使用 TCN 生成 [239, 96]
+class GeneratorTCN(nn.Module):
+    def __init__(self, identity_dim=256, attribute_dim=256, out_size=(96, 239), kernel_size=3, dropout=0.2):
+        super(GeneratorTCN, self).__init__()
+        
+        self.fc = nn.Linear(identity_dim + attribute_dim, out_size[1])
+
+        channels = [512] * 2 + [256] * 4 + [128] * 6 + [out_size[0]]
+        self.tcn = TemporalConvNet(
+            num_inputs=1,
+            num_channels=channels,
+            kernel_size=kernel_size,
+            dropout=dropout
+        )
+        self.tanh = nn.Tanh()
+
+    def forward(self, identity, attribute):
+        x = torch.cat((identity, attribute), 1)
+
+        x = self.fc(x) # [N, T]
+        x = x.view(x.size(0), 1, -1) # [N, 1, T]
+
+        x = self.tcn(x) # [N, C, T]
+        x = self.tanh(x)
+        return x
+
 
 class Discriminator(nn.Module):
-    def __init__(self, input_size, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
+    def __init__(self, in_channel_num, latent_dim=64, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
         super(Discriminator, self).__init__()
 
         channels = [level_channel_num] * level_num
         self.tcn = TemporalConvNet(
-            input_size, # 骨骼1帧 + 动作240帧
+            in_channel_num,
             channels,
             kernel_size=kernel_size,
             dropout=dropout
         )
-        self.fc1 = nn.Linear(channels[-1], 64)
-        self.fc2 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(channels[-1], latent_dim)
+        self.leaky_relu = nn.LeakyReLU(0.1)
+        self.fc2 = nn.Linear(latent_dim, 1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, data):
-        # [n, 241, 96]
-        x = self.tcn(data)
-        x = x[:, :, -1] # [n, 256]
-        mid = F.leaky_relu(self.fc1(x), negative_slope=0.2) # [n, 64]
-        p = self.fc2(mid) # [n, 1]
-        p = torch.sigmoid(p) # [n, 1]
-        p = p.view(-1) # [n]
+        # data: [N, 96, 239]
+        x = self.tcn(data) # [N, C, T]
+        x = x[:, :, -1] # [N, C]
+        mid = self.leaky_relu(self.fc1(x)) # [N, 64]
+        p = self.sigmoid(self.fc2(mid)) # [N, 1]
+        p = p.view(-1) # [N]
 
         # x = F.leaky_relu(self.conv1(x), negative_slope=0.2)
         # x = F.leaky_relu(self.BN2(self.conv2(x)), negative_slope=0.2)

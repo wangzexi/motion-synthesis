@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from model import EncoderTCN
 from model import AttributeTCN
-from model import Generator
+from model import GeneratorTCN
 from model import Discriminator
 import dataloader
 import data_utils
@@ -19,8 +19,8 @@ dataset = dataloader.Hybrid_Dataset(*dataloader.load_dir_data_statistics_categor
 
 batch_size = 20
 learning_rate = 1e-4
-num_epochs = 100
-num_classes = dataset.category_num
+epochs_num = 100
+category_num = dataset.category_num
 
 dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
@@ -36,9 +36,9 @@ def load_models(dirpath):
   G.load_state_dict(torch.load(os.path.join(dirpath, 'G.pt')))
 
 I = EncoderTCN(
-  input_size=239, # frames 239
-  latent_dim=64,
-  category_num=num_classes,
+  in_channel_num=96, # 96 个关节通道
+  identity_dim=64,
+  category_num=category_num,
   level_channel_num=256,
   level_num=7,
   kernel_size=3,
@@ -54,33 +54,25 @@ else:
   exit()
 
 A = AttributeTCN(
-  input_size=239, # frames 239
-  latent_dim=64,
+  in_channel_num=96,
+  out_dim=64,
   level_channel_num=256,
-  level_num=7,
+  level_num=10,
   kernel_size=3,
   dropout=0.2
 ).to(device)
 
-G = Generator(
-  id_dim=64,
-  a_dim=64,
-  out_size=(239, 96)
+G = GeneratorTCN(
+  identity_dim=64,
+  attribute_dim=64,
+  out_size=(96, 239),
+  kernel_size=3,
+  dropout=0.2
 ).to(device)
 
-# C = EncoderTCN(
-#   input_size=241, # 骨骼1帧 + 动作240帧
-#   latent_dim=64,
-#   category_num=num_classes,
-#   level_channel_num=256,
-#   level_num=7,
-#   kernel_size=3,
-#   dropout=0.2
-# ).to(device)
-
 D = Discriminator(
-  input_size=239, # 骨骼1帧 + 动作240帧
-  level_channel_num=256, # 提取器 [256]
+  in_channel_num=96, # 96 个关节通道
+  level_channel_num=256, # 每层特征提取器数量 256
   level_num=8,
   kernel_size=3,
   dropout=0.2
@@ -106,14 +98,14 @@ legends = ['loss_I freeze', 'loss_KL', 'loss_D', 'loss_GD', 'loss_GR', 'loss_GC'
 losses = np.array([]).reshape(0, len(legends)) # 用于绘制折线图
 
 # 训练
-for epoch in range(num_epochs):
+for epoch in range(epochs_num):
   for batch_idx, (data_a, data_b) in enumerate(dataloader):
     skeleton_s, frames_s, label_s = data_a
     skeleton_a, frames_a, label_a = data_b
 
     # 排除掉第一帧，因为第一帧不是增量
-    x_s = frames_s[:, 1:, :].to(device=device) # [N, 239, 96]
-    x_a = frames_a[:, 1:, :].to(device=device)
+    x_s = frames_s[:, :, 1:].to(device=device) # [N, 96, 239]
+    x_a = frames_a[:, :, 1:].to(device=device)
     
     label_s = label_s.to(device=device)
 
@@ -143,8 +135,8 @@ for epoch in range(num_epochs):
 
     x_f = G(i_id, a_z) # f 代表 fake
 
-    d_real_p, d_real_feature = D(x_a)
-    d_fake_p, d_fake_feature = D(x_f)
+    d_real_p, _ = D(x_a)
+    d_fake_p, _ = D(x_f)
     # loss_D = torch.mean(-torch.log(d_real_p) - torch.log(1 - d_fake_p)) # 会出 log0 nan
     loss_D = 0.5 * (bce_loss(d_real_p, torch.ones_like(d_real_p)) + bce_loss(d_fake_p, torch.zeros_like(d_fake_p)))
 
@@ -154,11 +146,12 @@ for epoch in range(num_epochs):
     d_optimizer.zero_grad()
     a_optimizer.zero_grad()
 
-    loss_1 = loss_I + loss_KL + loss_D
+    # loss_1 = loss_I + loss_KL + loss_D
+    loss_1 = loss_KL + loss_D
     loss_1.backward()
     # i_optimizer.step()
-    d_optimizer.step()
     a_optimizer.step()
+    d_optimizer.step()
 
     ################## 训练 G
     _, i_id = I(x_s)
@@ -176,10 +169,10 @@ for epoch in range(num_epochs):
     print('loss_GR', loss_GR.item())
 
     c_ctg, c_fake_id = I(x_f) # 这里原本是用 C 再识别，现在改为 I
-    loss_C = cross_entropy_loss(c_ctg, label_s)
-    print('loss_C', loss_C.item())
     loss_GC = 0.5 * mse_loss(c_fake_id, i_id)
+    loss_C = cross_entropy_loss(c_ctg, label_s)
     print('loss_GC', loss_GC.item())
+    print('loss_C', loss_C.item())
 
     g_optimizer.zero_grad()
     loss_2 = loss_GR + loss_GD + loss_GC + loss_C
@@ -205,24 +198,24 @@ for epoch in range(num_epochs):
       if batch_idx % 2 == 1:
         tag = '自交'
         label = label_s
-        skeleton = skeleton_s.view(batch_size, 1, -1).numpy() # [N, 1, 96]
-        base_frames = frames_s[:, 0:1, :]
+        skeleton = skeleton_s.numpy() # [N, 93]
+        base_frames = frames_s[:, :, 0:1]
       else:
         tag = '杂交'
         label = label_a
-        skeleton = skeleton_a.view(batch_size, 1, -1).numpy() # [N, 1, 96]
-        base_frames = frames_a[:, 0:1, :]
+        skeleton = skeleton_a.numpy() # [N, 93]
+        base_frames = frames_a[:, :, 0:1]
 
-      frames = torch.cat((base_frames, x_f.detach().cpu()), dim=1).numpy() # 拼上原始第一帧
+      frames = torch.cat((base_frames, x_f.detach().cpu()), dim=2).numpy() # 拼上原始第一帧
       frames = np.array([data_utils.normalized_frames_to_frames(x, dataset.statistics) for x in frames])
-      frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames])
-      data = np.concatenate((skeleton, frames), axis=1) # [N, 241, 96]
+      frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames]) # [N, 96, 240]
 
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
 
       data_utils.save_bvh_to_file(
         './outputs/轮次{}-批次{}-{}-ID{}.bvh'.format(epoch, batch_idx, tag, label[0]),
-        data[0]
+        skeleton[0],
+        frames[0]
       )
 
     # 保存模型

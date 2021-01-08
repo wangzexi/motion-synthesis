@@ -13,8 +13,8 @@ def load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'):
   data = [(skeleton, data_utils.transform_frames_to_detal_frames(frames), label) for skeleton, frames, label in data]
 
   # 计算统计数据 min, max, mean, std
-  all_frames = np.array([x[1] for x in data]) # [161, 240, 96]
-  all_frames = all_frames[:, 1:, :] # [161, 239, 96] 统计时去除第一帧，因为它不是增量
+  all_frames = np.array([x[1] for x in data]) # [N, C, 240]
+  all_frames = all_frames[:, :, 1:] # [N, C, 239] 统计时去除第一帧基础，因为它不是增量
   statistics = data_utils.get_data_frames_statistics(all_frames)
   np.savetxt(os.path.join(dataset_dir, '_min_max_mean_std.csv'), statistics)
   
@@ -27,7 +27,7 @@ def load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'):
 
   return (data, statistics, category_num)
 
-# 载入目录下的所有 bvh 文件、归一
+# 基础数据集包装器
 class MyDataset(torch.utils.data.Dataset):
   def __init__(self, data, statistics, category_num):
     self.data = data
@@ -42,7 +42,7 @@ class MyDataset(torch.utils.data.Dataset):
 
 # 杂交数据集包装器
 class Hybrid_Dataset(MyDataset):
-  def __init__(self, data, statistics, category_num, drop_selfing=True): # 丢弃自交
+  def __init__(self, data, statistics, category_num, drop_selfing=True): # 是否丢弃自交
     self.data = data
     self.statistics = statistics
     self.category_num = category_num

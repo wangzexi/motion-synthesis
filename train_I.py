@@ -15,17 +15,17 @@ train_set, test_set = get_i_train_and_test_dataset(dataset_dir='./v5/walk_id_com
 
 batch_size = 20
 learning_rate = 1e-4
-num_epochs = 300
-num_classes = train_set.category_num
+epochs_num = 300
+category_num = train_set.category_num
 
 train_dataloader = torch.utils.data.DataLoader(dataset=train_set, batch_size=batch_size, shuffle=True, drop_last=False)
 test_dataloader = torch.utils.data.DataLoader(dataset=test_set, batch_size=batch_size, shuffle=True, drop_last=False)
 
 # 预训练 identity 分类器
 I = EncoderTCN(
-  input_size=239, # 动作239帧
-  latent_dim=64,
-  category_num=num_classes,
+  in_channel_num=96, # 96 个关节通道
+  identity_dim=64,
+  category_num=category_num,
   level_channel_num=256,
   level_num=7,
   kernel_size=3,
@@ -40,20 +40,19 @@ I_path = './models/I.pt'
 #   I.load_state_dict(torch.load(I_path))
 # else:
 
-bce_loss = torch.nn.BCELoss()
 cross_entropy_loss = torch.nn.CrossEntropyLoss()
 i_optimizer = torch.optim.Adam(I.parameters(), learning_rate)
 
 accuracy_train = []
 accuracy_test = []
 
-for epoch in range(num_epochs):
+for epoch in range(epochs_num):
   # 训练
   I.train()
   correct_num = 0
   total_num = 0
   for batch_idx, (_, frames, label) in enumerate(train_dataloader):
-    frames = frames[:, 1:, :].to(device=device)
+    frames = frames[:, :, 1:].to(device=device)
     label = label.to(device=device)
 
     ctg, _ = I(frames)
@@ -75,7 +74,7 @@ for epoch in range(num_epochs):
   correct_num = 0
   total_num = 0
   for batch_idx, (_, frames, label) in enumerate(test_dataloader):
-    frames = frames[:, 1:, :].to(device=device)
+    frames = frames[:, :, 1:].to(device=device)
     label = label.to(device=device)
     
     ctg, _ = I(frames)
