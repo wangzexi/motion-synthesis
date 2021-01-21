@@ -60,11 +60,9 @@ class ResidualBlock(nn.Module):
         return out
 
 
-## 1个动作动画 = 96关节通道 * 240帧数
-
-# I 与 C 都是这个玩意
+# I 与 C 都是这个
 class EncoderTCN(nn.Module):
-    def __init__(self, in_channel_num, identity_dim=24, category_num=10, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
+    def __init__(self, in_channel_num, identity_dim=24, category_num=10, kernel_size=3, dropout=0.2):
         '''
         in_channel_num: 单样本通道数，[样本个数, 单样本输入的通道数, 样本序列长度]
         identity_dim：输出的潜在向量 identity 的长度
@@ -76,10 +74,10 @@ class EncoderTCN(nn.Module):
         '''
         super(EncoderTCN, self).__init__()
 
-        channels = [level_channel_num] * level_num # [第1层卷积核数量，第2层卷积核数量, ..., 第levels层卷积核数量]
+        channels = [512] * 2 + [256] * 2 + [128] * 2 # [第1层卷积核数量，第2层卷积核数量, ..., 第levels层卷积核数量]
         self.tcn = TemporalConvNet(
-            in_channel_num,
-            channels,
+            num_inputs=in_channel_num,
+            num_channels=channels,
             kernel_size=kernel_size,
             dropout=dropout
         )
@@ -90,16 +88,9 @@ class EncoderTCN(nn.Module):
         self.fc_ctg = nn.Linear(identity_dim, category_num) # 分类 one-hot 向量
 
     def forward(self, data):
-        # inputs: [样本个数, 单样本输入的通道数, 样本序列长度]
-        # 单样本输入的通道数为帧数
-
-        # [样本个数, 卷积核数量num_channels, 样本序列长度]
-        x = self.tcn(data)
-
-        # [样本个数, 卷积核数量num_channels]
-        x = x[:, :, -1] # 对每个输出通道，取出最后一个神经元的值，这些玩意卷积了它们前面的序列元素
-
-        # [样本个数, output_size]
+        # data: [N, C, T]
+        x = self.tcn(data) # [N, C, T]
+        x = x[:, :, -1] # [N, 128]
         identity = self.fc_id(x)
         ctg = self.leaky_relu(self.fc_ctg(identity))
         return ctg, identity # 分类向量，压缩出的 identity
@@ -129,15 +120,15 @@ class EncoderTCN(nn.Module):
 #         return mu, out
 ###
 
-# 特征提取也用 TCN 吧
+# 特征提取
 class AttributeTCN(nn.Module):
-    def __init__(self, in_channel_num, out_dim=24, category_num=10, level_channel_num=32, level_num=6, kernel_size=2, dropout=0.2):
+    def __init__(self, in_channel_num, out_dim=64, kernel_size=3, dropout=0.2):
         super(AttributeTCN, self).__init__()
 
-        channels = [level_channel_num] * level_num
+        channels = [512] * 2 + [256] * 2 + [128] * 2
         self.tcn = TemporalConvNet(
-            in_channel_num,
-            channels,
+            num_inputs=in_channel_num,
+            num_channels=channels,
             kernel_size=kernel_size,
             dropout=dropout
         )
@@ -151,7 +142,7 @@ class AttributeTCN(nn.Module):
         log_var = self.fc_var(x)
         return mu, log_var
 
-'''
+
 # 生成 [239, 96]
 class Generator(nn.Module):
     def __init__(self, identity_dim=256, attribute_dim=256, out_size=(96, 239)):
@@ -201,18 +192,18 @@ class Generator(nn.Module):
         x = x[:, :, :self.out_size[0], :self.out_size[1]] # 实际只使用 [n, 1, 239, 96]
         x = x.view(x.size(0), x.size(2), x.size(3)) # [n, 239, 96]
         return x
-'''
+
 
 # 使用 TCN 生成 [239, 96]
 class GeneratorTCN(nn.Module):
     def __init__(self, identity_dim=256, attribute_dim=256, out_size=(96, 239), kernel_size=3, dropout=0.2):
         super(GeneratorTCN, self).__init__()
+        self.out_size = out_size
         
         self.fc = nn.Linear(identity_dim + attribute_dim, out_size[1])
-
-        channels = [512] * 2 + [256] * 4 + [128] * 6 + [out_size[0]]
+        channels = [out_size[0]] * 8
         self.tcn = TemporalConvNet(
-            num_inputs=1,
+            num_inputs=out_size[0],
             num_channels=channels,
             kernel_size=kernel_size,
             dropout=dropout
@@ -223,8 +214,9 @@ class GeneratorTCN(nn.Module):
         x = torch.cat((identity, attribute), 1)
 
         x = self.fc(x) # [N, T]
-        x = x.view(x.size(0), 1, -1) # [N, 1, T]
-
+        x = x.view(x.size(0), self.out_size[0], -1) # [N, out_size[0], T]
+        print(x.shape)
+        exit()
         x = self.tcn(x) # [N, C, T]
         x = self.tanh(x)
         return x
@@ -251,12 +243,8 @@ class Discriminator(nn.Module):
         x = self.tcn(data) # [N, C, T]
         x = x[:, :, -1] # [N, C]
         mid = self.leaky_relu(self.fc1(x)) # [N, 64]
-        p = self.sigmoid(self.fc2(mid)) # [N, 1]
+        # p = self.sigmoid(self.fc2(mid)) # [N, 1]
+        p = self.fc2(mid) # [N, 1]
         p = p.view(-1) # [N]
 
-        # x = F.leaky_relu(self.conv1(x), negative_slope=0.2)
-        # x = F.leaky_relu(self.BN2(self.conv2(x)), negative_slope=0.2)
-        # x = F.leaky_relu(self.BN3(self.conv3(x)), negative_slope=0.2)
-        # x = x.view(-1, self.featmap_dim * 4 * 4)
-        # out = F.sigmoid(self.fc(x))
         return p, mid # 返回此真概率、中间特征向量

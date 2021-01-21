@@ -1,10 +1,10 @@
-import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from model import EncoderTCN
 from dataloader import get_i_train_and_test_dataset
-import data_utils
+import os
+from datetime import datetime
 import pathlib
 
 torch.autograd.set_detect_anomaly(True)
@@ -26,19 +26,16 @@ I = EncoderTCN(
   in_channel_num=96, # 96 个关节通道
   identity_dim=64,
   category_num=category_num,
-  level_channel_num=256,
-  level_num=7,
-  kernel_size=3,
+  kernel_size=5,
   dropout=0.3
 ).to(device)
 
-I_path = './models/I.pt'
+output_path = os.path.join('.', 'outputs', datetime.now().strftime('%Y-%m-%d'))
+pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
+
+I_path = os.path.join(output_path, 'I.pt')
 # torch.save(I.state_dict(), I_path) # 保存
 # I.load_state_dict(torch.load(I_path)) # 载入
-
-# if os.path.isfile(i_path): # 如果有预训练的 I，就直接载入，跳过训练
-#   I.load_state_dict(torch.load(I_path))
-# else:
 
 cross_entropy_loss = torch.nn.CrossEntropyLoss()
 i_optimizer = torch.optim.Adam(I.parameters(), learning_rate)

@@ -22,7 +22,7 @@ def load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'):
   data = [(skeleton, torch.FloatTensor(data_utils.frames_to_normalized_frames(frames, statistics)), label) for skeleton, frames, label in data]
 
   # 因为 id 从零开始，分类总数直接取最后一个 bvh 文件的 id + 1
-  files = list(filter(lambda f: f.split('.')[-1] == 'bvh', os.listdir(dataset_dir)))
+  files = list(filter(lambda f: f.split('.')[-1] == 'bvh', sorted(os.listdir(dataset_dir))))
   category_num = int(files[-1].split('_')[0]) + 1
 
   return (data, statistics, category_num)

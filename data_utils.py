@@ -37,7 +37,7 @@ def load_bvh_from_file(filename):
   return (skeleton, frames, label)
 
 def load_all_bvh_from_dirctory(dirpath):
-  files = os.listdir(dirpath)
+  files = sorted(os.listdir(dirpath))
   files = filter(lambda f: f.split('.')[-1] == 'bvh', files) # 过滤出本目录所有 bvh 文件
   data = map(lambda f: load_bvh_from_file(os.path.join(dirpath, f)), files) # 载入每一个文件
   data = list(data)
