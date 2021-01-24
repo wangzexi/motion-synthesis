@@ -171,7 +171,7 @@ ROOT Hips
 									CHANNELS 3 Zrotation Yrotation Xrotation
 									End Site
 									{{
-										OFFSET {:.6f} {:.6f} {:.6f}
+										OFFSET 0.000000 0.000000 0.000000
 									}}
 								}}
 							}}

@@ -2,210 +2,161 @@ import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from model import EncoderTCN
-from model import AttributeTCN
-from model import GeneratorTCN
+from model import Encoder
+from model import Classifier
 from model import Generator
 from model import Discriminator
 import dataloader
 import data_utils
 import pathlib
-
 from datetime import datetime
 
 output_path = os.path.join('.', 'outputs', datetime.now().strftime('%Y-%m-%d'))
-print(output_path)
-
 pathlib.Path(os.path.join(output_path, 'models')).mkdir(parents=True, exist_ok=True)
 pathlib.Path(os.path.join(output_path, 'gens')).mkdir(parents=True, exist_ok=True)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-dataset = dataloader.Hybrid_Dataset(*dataloader.load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'))
+dataset = dataloader.MyDataset(*dataloader.load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'))
 
 batch_size = 20
 learning_rate = 1e-4
-epochs_num = 100
+epochs_num = 1000000
 category_num = dataset.category_num
-
-CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 10 # Gradient penalty lambda hyperparameter
+z_dim = 64
 
 dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
+
 def save_models(dirpath):
   pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
-  torch.save(A.state_dict(), os.path.join(dirpath, 'A.pt'))
+  torch.save(E.state_dict(), os.path.join(dirpath, 'E.pt'))
+  torch.save(G.state_dict(), os.path.join(dirpath, 'C.pt'))
   torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
-  torch.save(G.state_dict(), os.path.join(dirpath, 'G.pt'))
+  torch.save(C.state_dict(), os.path.join(dirpath, 'C.pt'))
 
 def load_models(dirpath):
-  A.load_state_dict(torch.load(os.path.join(dirpath, 'A.pt')))
-  D.load_state_dict(torch.load(os.path.join(dirpath, 'D.pt')))
+  E.load_state_dict(torch.load(os.path.join(dirpath, 'E.pt')))
   G.load_state_dict(torch.load(os.path.join(dirpath, 'G.pt')))
+  D.load_state_dict(torch.load(os.path.join(dirpath, 'D.pt')))
+  C.load_state_dict(torch.load(os.path.join(dirpath, 'C.pt')))
 
-I = EncoderTCN(
+E = Encoder(
   in_channel_num=96, # 96 个关节通道
-  identity_dim=64,
-  category_num=category_num,
-  kernel_size=5,
-  dropout=0.3
-).to(device)
-
-I_path = os.path.join(output_path, 'I.pt')
-if os.path.isfile(I_path): # 如果有预训练的 I，就直接载入
-  I.load_state_dict(torch.load(I_path))
-  print('已经载入预训练的 I.pt 文件')
-else:
-  print('不存在预训练的 I.pt 文件')
-  exit()
-
-A = AttributeTCN(
-  in_channel_num=96,
-  out_dim=64,
-  kernel_size=5,
+  z_dim=z_dim,
+  kernel_size=3,
   dropout=0.2
 ).to(device)
 
 G = Generator(
-  identity_dim=64,
-  attribute_dim=64,
+  z_dim=64,
+  c_dim=category_num,
   out_size=(96, 239)
-  # kernel_size=5,
-  # dropout=0.2
 ).to(device)
 
 D = Discriminator(
   in_channel_num=96, # 96 个关节通道
-  level_channel_num=256, # 每层特征提取器数量 256
-  level_num=8,
-  kernel_size=5,
+  kernel_size=3,
   dropout=0.2
 ).to(device)
 
-# load_models('./models/轮次40')
+C = Classifier(
+  in_channel_num=96, # 96 个关节通道
+  f_c_dim=64,
+  category_num=category_num,
+  kernel_size=3,
+  dropout=0.2
+).to(device)
 
-# VAE 的采样
-def reparameterize(mu, logvar):
-  std = torch.exp(0.5 * logvar)
-  eps = torch.randn_like(std)
-  return eps * std + mu
-
-# WGAN-GP 的梯度惩罚
-def calc_gradient_penalty(netD, real_data, fake_data):
-  alpha = torch.rand(real_data.size(0), 1).to(device)
-  alpha = alpha.expand((real_data.size(0), real_data.size(1) * real_data.size(2)))
-  alpha = alpha.view(real_data.size(0), real_data.size(1), real_data.size(2))
-
-  interpolates = alpha * real_data + ((1 - alpha) * fake_data)
-  interpolates.requires_grad_(True)
-
-  disc_interpolates, _ = netD(interpolates)
-
-  gradients = torch.autograd.grad(
-    outputs=disc_interpolates,
-    inputs=interpolates,
-    grad_outputs=torch.ones_like(disc_interpolates),
-    create_graph=True,
-    retain_graph=True,
-    only_inputs=True
-  )[0]
-
-  gradients = gradients.view(gradients.size(0), -1)
-  gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
-  return gradient_penalty
-
-a_optimizer = torch.optim.Adam(A.parameters(), learning_rate)
-g_optimizer = torch.optim.Adam(G.parameters(), learning_rate)
-d_optimizer = torch.optim.Adam(D.parameters(), learning_rate)
+optimizer_E = torch.optim.Adam(E.parameters(), learning_rate)
+optimizer_G = torch.optim.Adam(G.parameters(), learning_rate)
+optimizer_D = torch.optim.Adam(D.parameters(), learning_rate)
+optimizer_C = torch.optim.Adam(C.parameters(), learning_rate)
 
 cross_entropy_loss = torch.nn.CrossEntropyLoss()
 bce_loss = torch.nn.BCELoss()
 mse_loss = torch.nn.MSELoss()
+def kl_loss(mean, logvar):
+  return -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
 
-legends = ['loss_I freeze', 'loss_KL', 'loss_D', 'loss_GD', 'loss_GR', 'loss_GC']
+legends = ['L_C', 'L_D', 'L_GD', 'L_GC', 'L_G']
 losses = np.array([]).reshape(0, len(legends)) # 用于绘制折线图
+
+total_batch = 0
 
 # 训练
 for epoch in range(epochs_num):
-  for batch_idx, (data_a, data_b) in enumerate(dataloader):
-    skeleton_s, frames_s, label_s = data_a
-    skeleton_a, frames_a, label_a = data_b
+  for batch_i, data in enumerate(dataloader):
+    total_batch += 1
+    print('## 轮次：{} 批次：{} 总批：{}'.format(epoch, batch_i, total_batch))
 
-    # 排除掉第一帧，因为第一帧不是增量
-    x_s = frames_s[:, :, 1:].to(device=device) # [N, 96, 239]
-    x_a = frames_a[:, :, 1:].to(device=device)
+    skeleton, frames, label = data
+
+    # 从真实样本中取样 {x_r, c_r} ~ P_r
+    x_r = frames[:, :, 1:] # [N, 96, 239]，除掉非增量的首帧
+    x_r = x_r.to(device)
+
+    c_r = torch.zeros((x_r.shape[0], category_num)) # 转为 onehot
+    c_r[torch.arange(x_r.shape[0]), label] = 1
+    c_r = c_r.to(device)
+
+    # 训练分类器 C
+    f_c_x_r, c_x_r = C(x_r)
+
+    L_C = bce_loss(c_x_r, c_r)
+    C.zero_grad()
+    L_C.backward(retain_graph=True)
+    optimizer_C.step()
+    print('L_C', L_C.item())
+
+    # 训练 D
+    f_d_x_r, d_x_r = D(x_r)
+
+    z, mean, logvar = E(x_r) #, c_r)
+    L_KL = kl_loss(mean, logvar)
+    x_f = G(z, c_r)
+    f_d_x_f, d_x_f = D(x_f)
+
+    # 取样随机噪声 z_p ~ P_z，取样随机分类 c_p
+    z_p = torch.randn(x_r.shape[0], z_dim).to(device)
+    c_p = torch.nn.functional.one_hot(torch.randint(0, category_num, size=(x_r.shape[0],)), category_num).float().to(device)
+    x_p = G(z_p, c_p)
+    f_d_x_p, d_x_p = D(x_p)
+    L_D = bce_loss(d_x_r, torch.ones_like(d_x_r)) + bce_loss(d_x_f, torch.zeros_like(d_x_f)) + bce_loss(d_x_p, torch.zeros_like(d_x_p))
     
-    label_s = label_s.to(device=device)
+    D.zero_grad()
+    L_D.backward(retain_graph=True)
+    optimizer_D.step()
+    print('L_D', L_D.item())
 
-    print('# 轮次：{}，批次：{}'.format(epoch, batch_idx))
-    ## 自交杂交轮流进行
-    if (batch_idx % 2 == 1):
-      # 奇数步自交
-      lbd = 1 # 参数 λ，控制自交杂交重构相似程度
-      x_a = x_s
-      skeleton_a = skeleton_s
-      print('## 自交，λ：{}'.format(lbd))
-    else:
-      # 偶数步杂交
-      lbd = 0.1
-      print('## 杂交，λ：{}'.format(lbd))
+    # 训练 G、E
+    # 计算 x_r 和 x_p 的特征中心 f_d
+    L_GD = mse_loss(torch.mean(f_d_x_r, dim=0), torch.mean(f_d_x_p, dim=0))
+    print('L_GD', L_GD.item())
 
-    ################## 训练 D
+    # 计算 x_r 和 x_p 的特征中心 f_c
+    f_c_x_p, _ = C(x_p)
+    L_GC = mse_loss(torch.mean(f_c_x_r, dim=0), torch.mean(f_c_x_p, dim=0))
+    print('L_GC', L_GC.item())
 
-    i_ctg, i_id = I(x_s)
-    loss_I = cross_entropy_loss(i_ctg, label_s)
-    print('loss_I', loss_I.item())
+    f_c_x_f, _ = C(x_f)
+    L_G = mse_loss(x_r, x_f) + mse_loss(f_d_x_r, f_d_x_f) + mse_loss(f_c_x_r, f_c_x_f)
+    print('L_G', L_G.item())
 
-    for _ in range(CRITIC_ITERS): # 更多的训练 D
-      a_mu, a_log_var = A(x_a)
-      a_z = reparameterize(a_mu, a_log_var) # z ~ N
+    L_Gs = L_G + L_GD + L_GC
+    G.zero_grad()
+    L_Gs.backward(retain_graph=True)
+    optimizer_G.step()
+    print('L_Gs', L_Gs.item())
 
-      x_f = G(i_id, a_z) # f 代表 fake
-
-      d_real_critic, _ = D(x_a)
-      d_fake_critic, _ = D(x_f)
-      loss_D_critic = -(torch.mean(d_real_critic) - torch.mean(d_fake_critic))
-      print('loss_D_critic', loss_D_critic.item())
-
-      gradient_penalty = calc_gradient_penalty(D, x_a, x_f) # 这里用 a 到 f 插值
-
-      loss_1 = loss_D_critic + gradient_penalty
-      d_optimizer.zero_grad()
-      loss_1.backward(retain_graph=True)
-      d_optimizer.step()
-
-    ################## 训练 A, G
-    _, i_id = I(x_s)
-    a_mu, a_log_var = A(x_a)
-    a_z = reparameterize(a_mu, a_log_var)
-    loss_KL = torch.mean(0.5 * (torch.pow(a_mu, 2) + torch.exp(a_log_var) - a_log_var - 1))
-    print('loss_KL', loss_KL.item())
-
-    x_f = G(i_id, a_z) # f 代表 fake
-
-    d_real_p, d_real_feature = D(x_a)
-    d_fake_p, d_fake_feature = D(x_f)
-    loss_GD = 0.5 * mse_loss(d_fake_feature, d_real_feature)
-    loss_GR = lbd * 0.5 * mse_loss(x_f, x_a)
-    print('loss_GD', loss_GD.item())
-    print('loss_GR', loss_GR.item())
-
-    c_ctg, c_fake_id = I(x_f) # 这里原本是用 C 再识别，现在改为 I
-    loss_GC = 0.5 * mse_loss(c_fake_id, i_id)
-    loss_C = cross_entropy_loss(c_ctg, label_s)
-    print('loss_GC', loss_GC.item())
-    print('loss_C', loss_C.item())
-
-    a_optimizer.zero_grad()
-    g_optimizer.zero_grad()
-    loss_2 = loss_KL + loss_GR + loss_GD + loss_GC + loss_C
-    loss_2.backward()
-    a_optimizer.step()
-    g_optimizer.step()
+    L_Es = L_KL + L_G
+    E.zero_grad()
+    L_Es.backward()
+    optimizer_E.step()
+    print('L_Es', L_Es.item())
 
     ############################### 画损失图
-    losses = np.concatenate((losses, np.array([loss_I.item(), loss_KL.item(), loss_D_critic.item(), loss_GD.item(), loss_GR.item(), loss_GC.item()]).reshape(1, -1)), axis=0)
+    losses = np.concatenate((losses, np.array([L_C.item(), L_D.item(), L_GD.item(), L_GC.item(), L_G.item()]).reshape(1, -1)), axis=0)
     losses = losses[-10000:, :] # 只查看最近的损失
     x_axis = np.arange(losses.shape[0])
 
@@ -217,34 +168,23 @@ for epoch in range(epochs_num):
     plt.close(fig)
 
     # 输出检查点
-    if epoch % 1 == 0 and (batch_idx % 1000 == 0 or batch_idx % 1000 == 1):
+    if total_batch % 1000 == 0:
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
+      base_frames = frames[:, :, 0:1]
 
-      if batch_idx % 2 == 1:
-        tag = '自交'
-        label = label_s
-        skeleton = skeleton_s.numpy() # [N, 93]
-        base_frames = frames_s[:, :, 0:1]
-      else:
-        tag = '杂交'
-        label = label_a
-        skeleton = skeleton_a.numpy() # [N, 93]
-        base_frames = frames_a[:, :, 0:1]
-
-      frames = torch.cat((base_frames, x_f.detach().cpu()), dim=2).numpy() # 拼上原始第一帧
+      frames = torch.cat((base_frames, x_p.detach().cpu()), dim=2).numpy() # 拼上原始第一帧
       frames = np.array([data_utils.normalized_frames_to_frames(x, dataset.statistics) for x in frames])
       frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames]) # [N, 96, 240]
 
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
 
       data_utils.save_bvh_to_file(
-        os.path.join(output_path, 'gens', '轮次{}-批次{}-{}-ID{}.bvh'.format(epoch, batch_idx, tag, label[0])),
+        os.path.join(output_path, 'gens', '轮{}-批{}-标{}-P.bvh'.format(epoch, batch_i, label[0])),
         skeleton[0],
         frames[0]
       )
 
-    # 保存模型
-    if epoch % 1 == 0 and batch_idx == 0:
+      # 保存模型
       save_models(
         os.path.join(output_path, 'models', '轮次{}'.format(epoch))
       )

@@ -17,10 +17,11 @@ bvh -> frames:[96, 240] -> detal_frames:[96, 240] -> statistics detal_frames(wit
 
 ### 最新
 
-- 借鉴 WGAN-GP
+- 使用 CVAE-GAN
 
 ### 历史
 
+- 借鉴 WGAN-GP
 - 生成器改为 TCN
 - 修正为在时间维度上卷积
 - 分离 I 的训练过程，进行预训练防止过拟合的 I 产生的糟糕的 Loss_GC 反馈
