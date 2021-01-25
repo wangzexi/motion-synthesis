@@ -27,20 +27,6 @@ z_dim = 64
 
 dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
-
-def save_models(dirpath):
-  pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
-  torch.save(E.state_dict(), os.path.join(dirpath, 'E.pt'))
-  torch.save(G.state_dict(), os.path.join(dirpath, 'C.pt'))
-  torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
-  torch.save(C.state_dict(), os.path.join(dirpath, 'C.pt'))
-
-def load_models(dirpath):
-  E.load_state_dict(torch.load(os.path.join(dirpath, 'E.pt')))
-  G.load_state_dict(torch.load(os.path.join(dirpath, 'G.pt')))
-  D.load_state_dict(torch.load(os.path.join(dirpath, 'D.pt')))
-  C.load_state_dict(torch.load(os.path.join(dirpath, 'C.pt')))
-
 E = Encoder(
   in_channel_num=96, # 96 个关节通道
   z_dim=z_dim,
@@ -68,6 +54,19 @@ C = Classifier(
   dropout=0.2
 ).to(device)
 
+def save_models(dirpath):
+  pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
+  torch.save(E.state_dict(), os.path.join(dirpath, 'E.pt'))
+  torch.save(G.state_dict(), os.path.join(dirpath, 'C.pt'))
+  torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
+  torch.save(C.state_dict(), os.path.join(dirpath, 'C.pt'))
+
+def load_models(dirpath):
+  E.load_state_dict(torch.load(os.path.join(dirpath, 'E.pt')))
+  G.load_state_dict(torch.load(os.path.join(dirpath, 'G.pt')))
+  D.load_state_dict(torch.load(os.path.join(dirpath, 'D.pt')))
+  C.load_state_dict(torch.load(os.path.join(dirpath, 'C.pt')))
+
 optimizer_E = torch.optim.Adam(E.parameters(), learning_rate)
 optimizer_G = torch.optim.Adam(G.parameters(), learning_rate)
 optimizer_D = torch.optim.Adam(D.parameters(), learning_rate)
@@ -79,12 +78,11 @@ mse_loss = torch.nn.MSELoss()
 def kl_loss(mean, logvar):
   return -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
 
-legends = ['L_C', 'L_D', 'L_GD', 'L_GC', 'L_G']
+legends = ['L_C', 'L_KL', 'L_D', 'L_GD', 'L_GC', 'L_G']
 losses = np.array([]).reshape(0, len(legends)) # 用于绘制折线图
 
-total_batch = 0
-
 # 训练
+total_batch = 0
 for epoch in range(epochs_num):
   for batch_i, data in enumerate(dataloader):
     total_batch += 1
@@ -105,9 +103,11 @@ for epoch in range(epochs_num):
 
     L_C = bce_loss(c_x_r, c_r)
     C.zero_grad()
-    L_C.backward(retain_graph=True)
+    L_C.backward()
     optimizer_C.step()
     print('L_C', L_C.item())
+
+    f_c_x_r.detach_()
 
     # 训练 D
     f_d_x_r, d_x_r = D(x_r)
@@ -116,6 +116,7 @@ for epoch in range(epochs_num):
     L_KL = kl_loss(mean, logvar)
     x_f = G(z, c_r)
     f_d_x_f, d_x_f = D(x_f)
+    print('L_KL', L_KL.item())
 
     # 取样随机噪声 z_p ~ P_z，取样随机分类 c_p
     z_p = torch.randn(x_r.shape[0], z_dim).to(device)
@@ -156,7 +157,7 @@ for epoch in range(epochs_num):
     print('L_Es', L_Es.item())
 
     ############################### 画损失图
-    losses = np.concatenate((losses, np.array([L_C.item(), L_D.item(), L_GD.item(), L_GC.item(), L_G.item()]).reshape(1, -1)), axis=0)
+    losses = np.concatenate((losses, np.array([L_C.item(), L_KL.item(), L_D.item(), L_GD.item(), L_GC.item(), L_G.item()]).reshape(1, -1)), axis=0)
     losses = losses[-10000:, :] # 只查看最近的损失
     x_axis = np.arange(losses.shape[0])
 
@@ -186,5 +187,5 @@ for epoch in range(epochs_num):
 
       # 保存模型
       save_models(
-        os.path.join(output_path, 'models', '轮次{}'.format(epoch))
+        os.path.join(output_path, 'models', '轮{}'.format(epoch))
       )
