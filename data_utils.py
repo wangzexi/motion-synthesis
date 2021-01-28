@@ -118,6 +118,31 @@ def normalized_frames_to_frames(normalized_frames, statistics):
 
   return frames
 
+def frames_to_standardized_frames(frames, statistics):
+  # frames [C, T]
+  standardized_frames = np.copy(frames)
+
+  for i in range(standardized_frames.shape[0]): # 遍历关节通道
+    c_min, c_max, c_mean, c_std = statistics[i]
+    if c_min == c_max: # 该通道最大最小一样，直接设置成 0，防止归一分母为零
+      standardized_frames[i] = np.zeros_like(standardized_frames[i])
+      continue
+    # (x - mean) / std
+    standardized_frames[i] = (standardized_frames[i] - c_mean) / c_std
+
+  return standardized_frames
+
+def standardized_frames_to_frames(standardized_frames, statistics):
+  # standardized_frames [C, T]
+  frames = np.copy(standardized_frames)
+
+  for i in range(frames.shape[0]):
+    _, _, c_mean, c_std = statistics[i]
+    # x * std + mean
+    frames[i] = frames[i] * c_std + c_mean
+
+  return frames
+
 
 if __name__ == "__main__":
   data = load_all_bvh_from_dirctory('./v5/walk_id_compacted')

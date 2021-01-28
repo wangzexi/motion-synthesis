@@ -9,17 +9,13 @@ import random
 def load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'):
   data = data_utils.load_all_bvh_from_dirctory(dataset_dir)
 
-  # 将帧数据转为增量形式
-  data = [(skeleton, data_utils.transform_frames_to_detal_frames(frames), label) for skeleton, frames, label in data]
-
   # 计算统计数据 min, max, mean, std
   all_frames = np.array([x[1] for x in data]) # [N, C, 240]
-  all_frames = all_frames[:, :, 1:] # [N, C, 239] 统计时去除第一帧基础，因为它不是增量
   statistics = data_utils.get_data_frames_statistics(all_frames)
   np.savetxt(os.path.join(dataset_dir, '_min_max_mean_std.csv'), statistics)
   
-  # 将帧数据归一化
-  data = [(skeleton, torch.FloatTensor(data_utils.frames_to_normalized_frames(frames, statistics)), label) for skeleton, frames, label in data]
+  # 将帧数据标准化
+  data = [(skeleton, torch.FloatTensor(data_utils.frames_to_standardized_frames(frames, statistics)), label) for skeleton, frames, label in data]
 
   # 因为 id 从零开始，分类总数直接取最后一个 bvh 文件的 id + 1
   files = list(filter(lambda f: f.split('.')[-1] == 'bvh', sorted(os.listdir(dataset_dir))))

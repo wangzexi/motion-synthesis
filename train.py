@@ -43,7 +43,7 @@ E = Encoder(
 G = Generator(
   z_dim=z_dim,
   c_dim=category_num,
-  out_size=(96, 239)
+  out_size=(96, 240)
 ).to(device)
 
 D = Discriminator(
@@ -98,8 +98,7 @@ for epoch in range(epochs_num):
     skeleton, frames, label = data
 
     # 从真实样本中取样 {x_r, c_r} ~ P_r
-    x_r = frames[:, :, 1:] # [N, 96, 239]，除掉非增量的首帧
-    x_r = x_r.to(device)
+    x_r = frames.to(device) # [N, 96, 240]
 
     c_r = torch.zeros((x_r.shape[0], category_num)) # 转为 onehot
     c_r[torch.arange(x_r.shape[0]), label] = 1
@@ -180,18 +179,13 @@ for epoch in range(epochs_num):
     if total_batch % 1000 == 0:
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
 
-      # 随机首帧
-      base_frames = frames[:, :, 0:1]
-
-      frames = torch.cat((base_frames, x_p.detach().cpu()), dim=2).numpy() # 拼上原始第一帧
-      frames = np.array([data_utils.normalized_frames_to_frames(x, dataset.statistics) for x in frames])
-      frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames]) # [N, 96, 240]
+      frames = np.array([data_utils.standardized_frames_to_frames(x, dataset.statistics) for x in frames])
 
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
 
       data_utils.save_bvh_to_file(
         os.path.join(output_path, 'gens', '轮{}-批{}-标{}-P.bvh'.format(epoch, batch_i, c_p_n[0])),
-        skeleton[0], # 骨骼找不着了
+        skeleton[0], # 先随便贴个骨骼吧
         frames[0]
       )
 
