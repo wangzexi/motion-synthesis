@@ -23,7 +23,13 @@ batch_size = 20
 learning_rate = 1e-4
 epochs_num = 1000000
 category_num = dataset.category_num
-z_dim = 64
+z_dim = 32
+
+# 重构参数
+lbd_1 = 3
+lbd_2 = 1
+lbd_3 = 1e-3
+lbd_4 = 1e-3
 
 dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
@@ -35,20 +41,21 @@ E = Encoder(
 ).to(device)
 
 G = Generator(
-  z_dim=64,
+  z_dim=z_dim,
   c_dim=category_num,
   out_size=(96, 239)
 ).to(device)
 
 D = Discriminator(
   in_channel_num=96, # 96 个关节通道
+  f_d_dim=32,
   kernel_size=3,
   dropout=0.2
 ).to(device)
 
 C = Classifier(
   in_channel_num=96, # 96 个关节通道
-  f_c_dim=64,
+  f_c_dim=32,
   category_num=category_num,
   kernel_size=3,
   dropout=0.2
@@ -120,7 +127,8 @@ for epoch in range(epochs_num):
 
     # 取样随机噪声 z_p ~ P_z，取样随机分类 c_p
     z_p = torch.randn(x_r.shape[0], z_dim).to(device)
-    c_p = torch.nn.functional.one_hot(torch.randint(0, category_num, size=(x_r.shape[0],)), category_num).float().to(device)
+    c_p_n = torch.randint(0, category_num, size=(x_r.shape[0],))
+    c_p = torch.nn.functional.one_hot(c_p_n, category_num).float().to(device)
     x_p = G(z_p, c_p)
     f_d_x_p, d_x_p = D(x_p)
     L_D = bce_loss(d_x_r, torch.ones_like(d_x_r)) + bce_loss(d_x_f, torch.zeros_like(d_x_f)) + bce_loss(d_x_p, torch.zeros_like(d_x_p))
@@ -144,13 +152,13 @@ for epoch in range(epochs_num):
     L_G = mse_loss(x_r, x_f) + mse_loss(f_d_x_r, f_d_x_f) + mse_loss(f_c_x_r, f_c_x_f)
     print('L_G', L_G.item())
 
-    L_Gs = L_G + L_GD + L_GC
+    L_Gs = lbd_2 * L_G + lbd_3 * L_GD + lbd_4 * L_GC
     G.zero_grad()
     L_Gs.backward(retain_graph=True)
     optimizer_G.step()
     print('L_Gs', L_Gs.item())
 
-    L_Es = L_KL + L_G
+    L_Es = lbd_1 * L_KL + lbd_2 * L_G
     E.zero_grad()
     L_Es.backward()
     optimizer_E.step()
@@ -171,6 +179,8 @@ for epoch in range(epochs_num):
     # 输出检查点
     if total_batch % 1000 == 0:
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
+
+      # 随机首帧
       base_frames = frames[:, :, 0:1]
 
       frames = torch.cat((base_frames, x_p.detach().cpu()), dim=2).numpy() # 拼上原始第一帧
@@ -180,8 +190,8 @@ for epoch in range(epochs_num):
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
 
       data_utils.save_bvh_to_file(
-        os.path.join(output_path, 'gens', '轮{}-批{}-标{}-P.bvh'.format(epoch, batch_i, label[0])),
-        skeleton[0],
+        os.path.join(output_path, 'gens', '轮{}-批{}-标{}-P.bvh'.format(epoch, batch_i, c_p_n[0])),
+        skeleton[0], # 骨骼找不着了
         frames[0]
       )
 

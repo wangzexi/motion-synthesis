@@ -1,0 +1,8 @@
+.DS_Store
+.vscode
+__pycache__
+backup
+outputs
+
+1.py
+losses.png

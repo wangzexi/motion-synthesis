@@ -74,7 +74,7 @@ class Classifier(nn.Module):
         '''
         super(Classifier, self).__init__()
 
-        channels = [256] * 2 + [128] * 4 # [第1层卷积核数量，第2层卷积核数量, ..., 第levels层卷积核数量]
+        channels = [64] * 8 # [第1层卷积核数量，第2层卷积核数量, ..., 第levels层卷积核数量]
         self.tcn = TemporalConvNet(
             num_inputs=in_channel_num,
             num_channels=channels,
@@ -105,7 +105,7 @@ class Encoder(nn.Module):
     def __init__(self, in_channel_num, z_dim=64, kernel_size=3, dropout=0.2):
         super(Encoder, self).__init__()
 
-        channels = [256] * 2 + [128] * 4
+        channels = [64] * 8
         self.tcn = TemporalConvNet(
             num_inputs=in_channel_num,
             num_channels=channels,
@@ -209,7 +209,7 @@ class Discriminator(nn.Module):
     def __init__(self, in_channel_num, f_d_dim=64, kernel_size=2, dropout=0.2):
         super(Discriminator, self).__init__()
 
-        channels = [256] * 2 + [128] * 4
+        channels = [64] * 8
         self.tcn = TemporalConvNet(
             num_inputs=in_channel_num,
             num_channels=channels,
