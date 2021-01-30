@@ -35,9 +35,7 @@ dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size,
 
 E = Encoder(
   in_channel_num=96, # 96 个关节通道
-  z_dim=z_dim,
-  kernel_size=3,
-  dropout=0.2
+  z_dim=z_dim
 ).to(device)
 
 G = Generator(
@@ -48,17 +46,13 @@ G = Generator(
 
 D = Discriminator(
   in_channel_num=96, # 96 个关节通道
-  f_d_dim=32,
-  kernel_size=3,
-  dropout=0.2
+  f_d_dim=32
 ).to(device)
 
 C = Classifier(
   in_channel_num=96, # 96 个关节通道
   f_c_dim=32,
-  category_num=category_num,
-  kernel_size=3,
-  dropout=0.2
+  category_num=category_num
 ).to(device)
 
 def save_models(dirpath):
