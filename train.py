@@ -64,7 +64,7 @@ C = Classifier(
 def save_models(dirpath):
   pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
   torch.save(E.state_dict(), os.path.join(dirpath, 'E.pt'))
-  torch.save(G.state_dict(), os.path.join(dirpath, 'C.pt'))
+  torch.save(G.state_dict(), os.path.join(dirpath, 'G.pt'))
   torch.save(D.state_dict(), os.path.join(dirpath, 'D.pt'))
   torch.save(C.state_dict(), os.path.join(dirpath, 'C.pt'))
 
@@ -73,6 +73,8 @@ def load_models(dirpath):
   G.load_state_dict(torch.load(os.path.join(dirpath, 'G.pt')))
   D.load_state_dict(torch.load(os.path.join(dirpath, 'D.pt')))
   C.load_state_dict(torch.load(os.path.join(dirpath, 'C.pt')))
+
+# load_models(os.path.join('outputs', '2021-01-28', 'models', '轮{}'.format(5249)))
 
 optimizer_E = torch.optim.Adam(E.parameters(), learning_rate)
 optimizer_G = torch.optim.Adam(G.parameters(), learning_rate)
@@ -176,10 +178,10 @@ for epoch in range(epochs_num):
     plt.close(fig)
 
     # 输出检查点
-    if total_batch % 1000 == 0:
+    if total_batch % 500 == 0:
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
 
-      frames = np.array([data_utils.standardized_frames_to_frames(x, dataset.statistics) for x in frames])
+      frames = np.array([data_utils.normalized_frames_to_frames(x_p.detach().cpu().numpy(), dataset.statistics) for x in frames])
 
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
 
