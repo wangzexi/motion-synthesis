@@ -91,13 +91,13 @@ class Encoder(nn.Module):
 
 
 class ResBlock(nn.Module):
-  def __init__(self, c_in_dim, c_out_dim, t_dim):
+  def __init__(self, c_in_dim, c_out_dim):
     super(ResBlock, self).__init__()
     self.conv = nn.Sequential(
-        nn.LayerNorm((c_in_dim, t_dim)),
+        nn.InstanceNorm1d(c_in_dim),
         nn.LeakyReLU(0.2, True),
         nn.Conv1d(c_in_dim, c_in_dim, kernel_size=3, stride=1, padding=1),
-        nn.LayerNorm((c_in_dim, t_dim)),
+        nn.InstanceNorm1d(c_in_dim),
         nn.LeakyReLU(0.2, True),
         nn.Conv1d(c_in_dim, c_out_dim, kernel_size=3, stride=1, padding=1),
         nn.Upsample(scale_factor=2) # t_dim * 2
@@ -125,20 +125,20 @@ class Generator(nn.Module):
             nn.Conv1d(512, 256, kernel_size=3, padding=1),
             nn.LeakyReLU(0.2, True)
         )
-        self.block2 = ResBlock(256, 256, 4)
+        self.block2 = ResBlock(256, 256)
         self.block3 = nn.Sequential(
             nn.Conv1d(256, 256, kernel_size=3, padding=1),
             nn.LeakyReLU(0.2, True)
         )
-        self.block4 = ResBlock(256, 256, 8)
-        self.block5 = ResBlock(256, 256, 16)
+        self.block4 = ResBlock(256, 256)
+        self.block5 = ResBlock(256, 256)
         self.block6 = nn.Sequential(
             nn.Conv1d(256, 128, kernel_size=3, padding=1),
             nn.LeakyReLU(0.2, True)
         )
-        self.block7 = ResBlock(128, 128, 32)
-        self.block8 = ResBlock(128, 96, 64)
-        self.block9 = ResBlock(96, 96, 128)
+        self.block7 = ResBlock(128, 128)
+        self.block8 = ResBlock(128, 96)
+        self.block9 = ResBlock(96, 96)
         self.block10 = nn.Sequential(
             nn.Conv1d(96, 96, kernel_size=3, stride=1, padding=1, bias=False),
             nn.Tanh()
