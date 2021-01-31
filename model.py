@@ -16,15 +16,16 @@ class Classifier(nn.Module):
             dropout=0.2
         )
 
-        self.tcn2 = TemporalConvNet(
-            num_inputs=in_channel_num,
-            num_channels=[32] * 3,
-            kernel_size=5,
-            dropout=0.2
-        )
+        # self.tcn2 = TemporalConvNet(
+        #     num_inputs=in_channel_num,
+        #     num_channels=[32] * 3,
+        #     kernel_size=5,
+        #     dropout=0.2
+        # )
 
         self.fc1 = nn.Sequential(
-            nn.Linear(64 + 32, f_c_dim),
+            # nn.Linear(64 + 32, f_c_dim),
+            nn.Linear(64, f_c_dim),
             nn.LeakyReLU(0.2, True)
         )
         self.fc2 = nn.Sequential(
@@ -35,9 +36,10 @@ class Classifier(nn.Module):
     def forward(self, data):
         # data: [N, C, T]
         tcn1 = self.tcn1(data)[:, :, -1] # [N, C]
-        tcn2 = self.tcn2(data)[:, :, -1]
+        # tcn2 = self.tcn2(data)[:, :, -1]
 
-        x = torch.cat((tcn1, tcn2), dim=1)
+        # x = torch.cat((tcn1, tcn2), dim=1)
+        x = tcn1
 
         f_c = self.fc1(x)
         x = self.fc2(f_c) # one-hot [N, category_num]
@@ -55,22 +57,24 @@ class Encoder(nn.Module):
             dropout=0.2
         )
 
-        self.tcn2 = TemporalConvNet(
-            num_inputs=in_channel_num,
-            num_channels=[32] * 3,
-            kernel_size=5,
-            dropout=0.2
-        )
+        # self.tcn2 = TemporalConvNet(
+        #     num_inputs=in_channel_num,
+        #     num_channels=[32] * 3,
+        #     kernel_size=5,
+        #     dropout=0.2
+        # )
 
-        self.tcn3 = TemporalConvNet(
-            num_inputs=in_channel_num,
-            num_channels=[16] * 2,
-            kernel_size=7,
-            dropout=0.2
-        )
+        # self.tcn3 = TemporalConvNet(
+        #     num_inputs=in_channel_num,
+        #     num_channels=[16] * 2,
+        #     kernel_size=7,
+        #     dropout=0.2
+        # )
 
-        self.fc1 = nn.Linear(64 + 32 + 16, z_dim)
-        self.fc2 = nn.Linear(64 + 32 + 16, z_dim)
+        # self.fc1 = nn.Linear(64 + 32 + 16, z_dim)
+        # self.fc2 = nn.Linear(64 + 32 + 16, z_dim)
+        self.fc1 = nn.Linear(64, z_dim)
+        self.fc2 = nn.Linear(64, z_dim)
 
     def reparameterize(self, mean, logvar):
         std = torch.exp(logvar)
@@ -79,10 +83,11 @@ class Encoder(nn.Module):
 
     def forward(self, data):
         tcn1 = self.tcn1(data)[:, :, -1] # [N, C]
-        tcn2 = self.tcn2(data)[:, :, -1]
-        tcn3 = self.tcn3(data)[:, :, -1]
+        # tcn2 = self.tcn2(data)[:, :, -1]
+        # tcn3 = self.tcn3(data)[:, :, -1]
 
-        x = torch.cat((tcn1, tcn2, tcn3), dim=1)
+        # x = torch.cat((tcn1, tcn2, tcn3), dim=1)
+        x = tcn1
 
         mean = self.fc1(x)
         logvar = self.fc2(x)
@@ -202,22 +207,23 @@ class Discriminator(nn.Module):
             dropout=0.2
         )
 
-        self.tcn2 = TemporalConvNet(
-            num_inputs=in_channel_num,
-            num_channels=[32] * 3,
-            kernel_size=5,
-            dropout=0.2
-        )
+        # self.tcn2 = TemporalConvNet(
+        #     num_inputs=in_channel_num,
+        #     num_channels=[32] * 3,
+        #     kernel_size=5,
+        #     dropout=0.2
+        # )
 
-        self.tcn3 = TemporalConvNet(
-            num_inputs=in_channel_num,
-            num_channels=[16] * 2,
-            kernel_size=7,
-            dropout=0.2
-        )
+        # self.tcn3 = TemporalConvNet(
+        #     num_inputs=in_channel_num,
+        #     num_channels=[16] * 2,
+        #     kernel_size=7,
+        #     dropout=0.2
+        # )
 
         self.fc1 = nn.Sequential(
-            nn.Linear(64 + 32 + 16, f_d_dim),
+            # nn.Linear(64 + 32 + 16, f_d_dim),
+            nn.Linear(64, f_d_dim),
             nn.LeakyReLU(0.2, True)
         )
 
@@ -229,10 +235,11 @@ class Discriminator(nn.Module):
     def forward(self, data):
         # data: [N, 96, 239]
         tcn1 = self.tcn1(data)[:, :, -1] # [N, C]
-        tcn2 = self.tcn2(data)[:, :, -1] # [N, C]
-        tcn3 = self.tcn3(data)[:, :, -1] # [N, C]
+        # tcn2 = self.tcn2(data)[:, :, -1] # [N, C]
+        # tcn3 = self.tcn3(data)[:, :, -1] # [N, C]
 
-        x = torch.cat((tcn1, tcn2, tcn3), dim=1)
+        # x = torch.cat((tcn1, tcn2, tcn3), dim=1)
+        x = tcn1
 
         f_d = self.fc1(x)
         x = self.fc2(f_d)
