@@ -19,7 +19,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 dataset = dataloader.MyDataset(*dataloader.load_dir_data_statistics_category_num(dataset_dir='./v5/walk_id_compacted'))
 
-batch_size = 20
+batch_size = 40
 learning_rate = 1e-4
 epochs_num = 1000000
 category_num = dataset.category_num
@@ -35,9 +35,7 @@ dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size,
 
 E = Encoder(
   in_channel_num=96, # 96 个关节通道
-  z_dim=z_dim,
-  kernel_size=3,
-  dropout=0.2
+  z_dim=z_dim
 ).to(device)
 
 G = Generator(
@@ -48,17 +46,13 @@ G = Generator(
 
 D = Discriminator(
   in_channel_num=96, # 96 个关节通道
-  f_d_dim=32,
-  kernel_size=3,
-  dropout=0.2
+  f_d_dim=32
 ).to(device)
 
 C = Classifier(
   in_channel_num=96, # 96 个关节通道
   f_c_dim=32,
-  category_num=category_num,
-  kernel_size=3,
-  dropout=0.2
+  category_num=category_num
 ).to(device)
 
 def save_models(dirpath):
@@ -177,7 +171,7 @@ for epoch in range(epochs_num):
     plt.close(fig)
 
     # 输出检查点
-    if total_batch % 1000 == 0:
+    if total_batch % 500 == 0:
       # statistics = np.loadtext('./v5/walk_id_compacted/_min_max_mean_std.csv')
 
       # 随机首帧
@@ -189,11 +183,13 @@ for epoch in range(epochs_num):
 
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
 
-      data_utils.save_bvh_to_file(
-        os.path.join(output_path, 'gens', '轮{}-批{}-标{}-P.bvh'.format(epoch, batch_i, c_p_n[0])),
-        skeleton[0], # 骨骼找不着了
-        frames[0]
-      )
+      for i in range(10):
+        data_utils.save_bvh_to_file(
+          os.path.join(output_path, 'gens', '轮{}-批{}-标{}-{}.bvh'.format(epoch, batch_i, c_p_n[i], i)),
+          skeleton[0], # 骨骼找不着了随便拼一个
+          frames[i]
+        )
+      
 
       # 保存模型
       save_models(
