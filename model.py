@@ -137,8 +137,8 @@ class Generator(nn.Module):
             nn.LeakyReLU(0.2, True)
         )
         self.block7 = ResBlock(128, 128, 32)
-        self.block8 = ResBlock(128, 128, 64)
-        self.block9 = ResBlock(128, 96, 128)
+        self.block8 = ResBlock(128, 96, 64)
+        self.block9 = ResBlock(96, 96, 128)
         self.block10 = nn.Sequential(
             nn.Conv1d(96, 96, kernel_size=3, stride=1, padding=1, bias=False),
             nn.Tanh()
@@ -156,7 +156,7 @@ class Generator(nn.Module):
         x = self.block5(x) # [N, 256, 32]
         x = self.block6(x) # [N, 128, 32]
         x = self.block7(x) # [N, 128, 64]
-        x = self.block8(x) # [N, 128, 128]
+        x = self.block8(x) # [N, 96, 128]
         x = self.block9(x) # [N, 96, 256]
         x = self.block10(x) # [N, 96, 256]
         x = x[:, :self.out_size[0], :self.out_size[1]] # [N, 96, 240]
