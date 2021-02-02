@@ -65,18 +65,25 @@ class Classifier(nn.Module):
 
 # 编码器
 class Encoder(nn.Module):
-    def __init__(self, in_channel_num, z_dim=64):
+    def __init__(self, in_channel_num, z_dim):
         super(Encoder, self).__init__()
 
-        channels = [64] * 8
-        self.tcn = TemporalConvNet(
+        self.tcn1 = TemporalConvNet(
             num_inputs=in_channel_num,
-            num_channels=channels,
+            num_channels=[64] * 8,
             kernel_size=3,
             dropout=0.2
         )
-        self.fc1 = nn.Linear(channels[-1], z_dim)
-        self.fc2 = nn.Linear(channels[-1], z_dim)
+
+        self.tcn2 = TemporalConvNet(
+            num_inputs=in_channel_num,
+            num_channels=[32] * 3,
+            kernel_size=5,
+            dropout=0.2
+        )
+
+        self.fc1 = nn.Linear(64 + 32, z_dim)
+        self.fc2 = nn.Linear(64 + 32, z_dim)
 
     def reparameterize(self, mean, logvar):
         std = torch.exp(logvar)
@@ -84,8 +91,9 @@ class Encoder(nn.Module):
         return mean + eps * std
 
     def forward(self, data):
-        x = self.tcn(data) # [N, C, T]
-        x = x[:, :, -1] # [N, C]
+        tcn1 = self.tcn1(data)[:, :, -1]
+        tcn2 = self.tcn2(data)[:, :, -1]
+        x = torch.cat([tcn1, tcn2], dim=1)
         mean = self.fc1(x)
         logvar = self.fc2(x)
         z = self.reparameterize(mean, logvar)

@@ -23,7 +23,7 @@ batch_size = 40
 learning_rate = 1e-4
 epochs_num = 1000000
 category_num = dataset.category_num
-z_dim = 32
+z_dim = 96
 
 # 重构参数
 lbd_1 = 3
@@ -176,20 +176,26 @@ for epoch in range(epochs_num):
 
       # 随机首帧
       base_frames = frames[:, :, 0:1]
-
       frames = torch.cat((base_frames, x_p.detach().cpu()), dim=2).numpy() # 拼上原始第一帧
       frames = np.array([data_utils.normalized_frames_to_frames(x, dataset.statistics) for x in frames])
       frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames]) # [N, 96, 240]
-
       # np.savetxt('./test.csv', x_f[0].detach().cpu().numpy())
-
-      for i in range(10):
+      for i in range(5):
         data_utils.save_bvh_to_file(
-          os.path.join(output_path, 'gens', '轮{}-批{}-标{}-{}.bvh'.format(epoch, batch_i, c_p_n[i], i)),
+          os.path.join(output_path, 'gens', 'x_p-轮{}-批{}-标{}-{}.bvh'.format(epoch, batch_i, c_p_n[i], i)),
           skeleton[0], # 骨骼找不着了随便拼一个
           frames[i]
         )
       
+      frames = torch.cat((base_frames, x_f.detach().cpu()), dim=2).numpy() # 拼上原始第一帧
+      frames = np.array([data_utils.normalized_frames_to_frames(x, dataset.statistics) for x in frames])
+      frames = np.array([data_utils.transform_detal_frames_to_frames(x) for x in frames]) # [N, 96, 240]
+      for i in range(5):
+        data_utils.save_bvh_to_file(
+          os.path.join(output_path, 'gens', 'x_f-轮{}-批{}-标{}-{}.bvh'.format(epoch, batch_i, c_p_n[i], i)),
+          skeleton[0], # 骨骼找不着了随便拼一个
+          frames[i]
+        )
 
       # 保存模型
       save_models(
