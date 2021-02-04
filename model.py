@@ -8,7 +8,8 @@ class Classifier(nn.Module):
 
         self.gru = nn.GRU(
             input_size=in_channel_num,
-            hidden_size=f_c_dim
+            hidden_size=f_c_dim,
+            num_layers=4
         )
 
         self.fc0 = nn.Sequential(
@@ -37,8 +38,8 @@ class Encoder(nn.Module):
 
         self.gru = nn.GRU(
             input_size=in_channel_num,
-            hidden_size=64
-            # num_layers=3
+            hidden_size=64,
+            num_layers=4
         )
         self.fc0 = nn.Sequential(
             nn.Linear(64, 64),
@@ -69,15 +70,17 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.input_size = out_channel_num
         self.hidden_size = out_channel_num
-        self.seq_len=seq_len
+        self.seq_len = seq_len
+        self.num_layers = 4
 
         self.fc1 = nn.Sequential(
-            nn.Linear(z_dim + c_dim, self.hidden_size),
+            nn.Linear(z_dim + c_dim, self.hidden_size * self.num_layers),
             nn.LeakyReLU(0.2, True)
         )
         self.gru = nn.GRU(
             input_size=self.input_size,
-            hidden_size=self.hidden_size
+            hidden_size=self.hidden_size,
+            num_layers=self.num_layers
         )
         self.fc2 = nn.Sequential(
             nn.Linear(self.hidden_size, self.hidden_size),
@@ -87,10 +90,11 @@ class Generator(nn.Module):
     def forward(self, z, c):
         x = torch.cat((z, c), dim=1)
         h = self.fc1(x)
+        h = h.view(self.num_layers, x.size(0), -1)
 
         out, h = self.gru(
-            torch.zeros((self.seq_len, z.size(0), self.input_size), device=x.device),
-            h.view(1, *h.shape)
+            torch.zeros((self.seq_len, x.size(0), self.input_size), device=x.device),
+            h
         )
         x = self.fc2(out)
         return out.permute([1, 2, 0]) # [N, C, T]
@@ -101,7 +105,8 @@ class Discriminator(nn.Module):
 
         self.gru = nn.GRU(
             input_size=in_channel_num,
-            hidden_size=f_d_dim
+            hidden_size=f_d_dim,
+            num_layers=4
         )
 
         self.fc0 = nn.Sequential(
