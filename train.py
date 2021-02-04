@@ -23,7 +23,7 @@ batch_size = 40
 learning_rate = 1e-4
 epochs_num = 1000000
 category_num = dataset.category_num
-z_dim = 96
+z_dim = 64
 
 # 重构参数
 lbd_1 = 3
@@ -41,7 +41,8 @@ E = Encoder(
 G = Generator(
   z_dim=z_dim,
   c_dim=category_num,
-  out_size=(96, 239)
+  out_channel_num=96,
+  seq_len=239
 ).to(device)
 
 D = Discriminator(
@@ -108,7 +109,7 @@ for epoch in range(epochs_num):
     optimizer_C.step()
     print('L_C', L_C.item())
 
-    f_c_x_r.detach_()
+    f_c_x_r = f_c_x_r.detach()
 
     # 训练 D
     f_d_x_r, d_x_r = D(x_r)
